@@ -1,0 +1,182 @@
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Виртуальная настольная игра</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/circletype@2.3.0/dist/circletype.min.js"></script>
+</head>
+<body>
+    <div class="game-container">
+        <!-- ВИДЕО КОНТЕЙНЕР В ВЕРХУ -->
+        <div class="video-container">
+            <div class="video-box">
+                <div class="video-placeholder" id="video-master">
+                    <i class="fas fa-user-tie"></i>
+                    <p>Ведущий</p>
+                </div>
+            </div>
+            <div class="video-box">
+                <div class="video-placeholder" id="video-team1">
+                    <i class="fas fa-user"></i>
+                    <p>Команда 1</p>
+                    <div class="current-turn-indicator" id="turn-indicator-1">ХОД</div>
+                </div>
+            </div>
+            <div class="video-box">
+                <div class="video-placeholder" id="video-team2">
+                    <i class="fas fa-user"></i>
+                    <p>Команда 2</p>
+                    <div class="current-turn-indicator" id="turn-indicator-2">ХОД</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Верхняя панель с информацией -->
+        <div class="top-panel">
+            <div class="score-board">
+                <div class="team-score" id="team1-score">
+                    <h3>Команда 1</h3>
+                    <div class="score">0</div>
+                </div>
+                <div class="dice-container">
+                    <div class="dice" id="dice">?</div>
+                    <button id="roll-dice" class="btn">Бросить кубик</button>
+                    <div id="task-type"></div>
+                </div>
+                <div class="team-score" id="team2-score">
+                    <h3>Команда 2</h3>
+                    <div class="score">0</div>
+                </div>
+            </div>
+            
+            <div class="timer-container">
+                <div id="timer">60</div>
+                <div class="timer-label">секунд</div>
+            </div>
+        </div>
+
+        <!-- Основное игровое поле -->
+        <div class="main-game-area">
+            <!-- Колоды карт слева -->
+            <div class="decks-left">
+                <div class="deck" id="kitchen-deck" data-type="1">
+                    <div class="deck-label">Кухня</div>
+                </div>
+                <div class="deck" id="bar-deck" data-type="2">
+                    <div class="deck-label">Бар</div>
+                </div>
+                <div class="deck" id="knowledge-deck" data-type="3">
+                    <div class="deck-label">Знания</div>
+                </div>
+            </div>
+
+            <!-- Игровое поле -->
+            <div class="game-board">
+                <canvas id="board-canvas"></canvas>
+                <div class="pieces">
+                    <div class="piece" id="piece1" data-team="1"></div>
+                    <div class="piece" id="piece2" data-team="2"></div>
+                </div>
+                <div id="cells-container">
+                    <!-- Клетки будут сгенерированы через JS -->
+                </div>
+            </div>
+
+            <!-- Колоды карт справа -->
+            <div class="decks-right">
+                <div class="deck" id="situation-deck" data-type="4">
+                    <div class="deck-label">Ситуация</div>
+                </div>
+                <div class="deck" id="service-deck" data-type="5">
+                    <div class="deck-label">Сервис</div>
+                </div>
+                <div class="deck" id="sales-deck" data-type="6">
+                    <div class="deck-label">Продажи</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Центральная карточка с вопросом -->
+        <div class="card-modal" id="card-modal">
+            <div class="card-content">
+                <div class="card-front">
+                    <div class="dice-icon" id="card-dice"></div>
+                </div>
+                <div class="card-back">
+                    <h3 id="card-category"></h3>
+                    <p id="card-question"></p>
+                    <div class="card-instruction" id="card-instruction"></div>
+                    <button id="answer-received" class="btn answer-btn">Ответ получен</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Панель ведущего -->
+        <div class="master-panel" id="master-panel">
+            <h3>Панель ведущего</h3>
+            <div class="points-control">
+                <div class="team-control">
+                    <h4>Команда 1</h4>
+                   <div class="points-section">
+    <div class="plus-points">
+        <h5>Добавить очки:</h5>
+        <div class="points-buttons">
+            <button class="point-btn plus-btn" data-points="1" data-team="1">+1</button>
+            <button class="point-btn plus-btn" data-points="2" data-team="1">+2</button>
+            <button class="point-btn plus-btn" data-points="3" data-team="1">+3</button>
+        </div>
+    </div>
+    <div class="minus-points">
+        <h5>Вычесть очки:</h5>
+        <div class="points-buttons">
+            <button class="point-btn minus-btn" data-points="-1" data-team="1">-1</button>
+            <button class="point-btn minus-btn" data-points="-2" data-team="1">-2</button>
+            <button class="point-btn minus-btn" data-points="-3" data-team="1">-3</button>
+        </div>
+    </div>
+</div>
+                    <div class="current-selection" id="team1-selection">
+                        Выбрано: <span>0 очков</span>
+                    </div>
+                </div>
+                <div class="team-control">
+                    <h4>Команда 2</h4>
+                    <div class="points-section">
+                        <div class="plus-points">
+                            <h5>Добавить очки:</h5>
+                            <div class="points-buttons">
+                                <button class="point-btn plus-btn" data-points="1" data-team="2">+1</button>
+                                <button class="point-btn plus-btn" data-points="2" data-team="2">+2</button>
+                                <button class="point-btn plus-btn" data-points="3" data-team="2">+3</button>
+                            </div>
+                        </div>
+                        <div class="minus-points">
+                            <h5>Вычесть очки:</h5>
+                            <div class="points-buttons">
+                                <button class="point-btn minus-btn" data-points="-1" data-team="2">-1</button>
+                                <button class="point-btn minus-btn" data-points="-2" data-team="2">-2</button>
+                                <button class="point-btn minus-btn" data-points="-3" data-team="2">-3</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="current-selection" id="team2-selection">
+                        Выбрано: <span>0 очков</span>
+                    </div>
+                </div>
+            </div>
+            <div class="master-actions">
+                <button id="apply-points" class="btn apply-btn">Применить очки</button>
+                <button id="next-turn" class="btn">Следующий ход</button>
+            </div>
+        </div>
+
+        <!-- Салюты при победе -->
+        <div id="fireworks"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
