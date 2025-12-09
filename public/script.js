@@ -203,12 +203,6 @@ class Game {
                             </button>
                         </div>
                         <div id="room-status" class="room-status"></div>
-                        
-                        <!-- Автоподбор комнат -->
-                        <div class="auto-join" style="margin-top: 15px; display: none;">
-                            <p>Или найдите доступную комнату:</p>
-                            <div id="available-rooms"></div>
-                        </div>
                     </div>
                     
                     <!-- Статус подключения -->
@@ -238,7 +232,7 @@ class Game {
             const statusText = modal.querySelector('#status-text');
             
             // Подключаемся к серверу
-            this.connectToServer();
+            this.setupSocketConnection(modal, resolve);
             
             // Показать/скрыть секции в зависимости от выбранной роли
             roleInputs.forEach(input => {
@@ -326,225 +320,6 @@ class Game {
                 }
             });
             
-            // Метод подключения к серверу
-            this.connectToServer = () => {
-                console.log('🔌 Подключаемся к серверу:', this.serverUrl);
-                
-                // Создаем подключение Socket.io
-                this.socket = io(this.serverUrl, {
-                    transports: ['websocket', 'polling'],
-                    reconnection: true,
-                    reconnectionAttempts: 5,
-                    reconnectionDelay: 1000
-                });
-                
-                // Обработчики событий Socket.io
-                this.socket.on('connect', () => {
-                    this.isConnected = true;
-                    statusText.innerHTML = '<i class="fas fa-check-circle"></i> Подключено к серверу';
-                    statusDiv.style.background = 'rgba(76, 175, 80, 0.2)';
-                    statusDiv.style.color = '#4CAF50';
-                    console.log('✅ Подключено к серверу');
-                });
-                
-                this.socket.on('connect_error', (error) => {
-                    statusText.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Ошибка подключения: ${error.message}`;
-                    statusDiv.style.background = 'rgba(244, 67, 54, 0.2)';
-                    statusDiv.style.color = '#f44336';
-                    console.error('❌ Ошибка подключения:', error);
-                    
-                    // Предлагаем переподключиться
-                    setTimeout(() => {
-                        if (!this.isConnected) {
-                            statusText.innerHTML = '<i class="fas fa-redo"></i> Пытаемся переподключиться...';
-                            this.socket.connect();
-                        }
-                    }, 3000);
-                });
-                
-                // Комната создана успешно (для ведущего)
-                this.socket.on('room-created', (data) => {
-                    this.roomCode = data.roomCode;
-                    this.playerName = data.playerName;
-                    
-                    // Показываем информацию о комнате
-                    modal.querySelector('#room-info').style.display = 'block';
-                    modal.querySelector('#room-code-display').textContent = data.roomCode;
-                    
-                    // Кнопка копирования кода
-                    modal.querySelector('#copy-code-btn').addEventListener('click', () => {
-                        navigator.clipboard.writeText(data.roomCode);
-                        const copyBtn = modal.querySelector('#copy-code-btn');
-                        const originalHTML = copyBtn.innerHTML;
-                        copyBtn.innerHTML = '<i class="fas fa-check"></i> Скопировано!';
-                        copyBtn.style.background = '#4CAF50';
-                        setTimeout(() => {
-                            copyBtn.innerHTML = originalHTML;
-                            copyBtn.style.background = '';
-                        }, 2000);
-                    });
-                    
-                    statusText.innerHTML = '<i class="fas fa-check-circle"></i> Комната создана!';
-                    
-                    // Закрываем модальное окно через 3 секунды
-                    setTimeout(() => {
-                        modal.remove();
-                        resolve();
-                    }, 3000);
-                });
-                
-                // Успешное присоединение к комнате
-                this.socket.on('join-success', (data) => {
-                    this.roomCode = data.roomCode;
-                    this.playerName = data.playerName;
-                    this.role = data.role;
-                    
-                    // Обновляем состояние игры с сервера
-                    if (data.gameState) {
-                        this.currentPlayer = data.gameState.currentPlayer;
-                        this.scores = data.gameState.scores || this.scores;
-                        this.positions = data.gameState.positions || this.positions;
-                        this.diceResult = data.gameState.diceResult || 0;
-                    }
-                    
-                    // Обновляем интерфейс
-                    this.updateScores();
-                    this.updatePieces();
-                    this.updateTurnIndicator();
-                    
-                    statusText.innerHTML = '<i class="fas fa-check-circle"></i> Вы в игре!';
-                    
-                    // Закрываем модальное окно
-                    setTimeout(() => {
-                        modal.remove();
-                        resolve();
-                    }, 2000);
-                });
-                
-                // Игрок присоединился к комнате
-                this.socket.on('player-joined', (data) => {
-                    this.showNotification(`${data.playerName} присоединился как ${this.getRoleNameFromType(data.role)}`, 'info');
-                    
-                    // Обновляем видео-плейсхолдеры
-                    this.updateVideoPlaceholders(data.players);
-                });
-                
-                // Игрок покинул комнату
-                this.socket.on('player-left', (data) => {
-                    this.showNotification(`${data.playerName} покинул игру`, 'warning');
-                    
-                    // Обновляем видео-плейсхолдеры
-                    if (data.role === 'player1') {
-                        document.querySelector('#video-team1 .video-placeholder p').textContent = 'Команда 1';
-                    } else if (data.role === 'player2') {
-                        document.querySelector('#video-team2 .video-placeholder p').textContent = 'Команда 2';
-                    }
-                });
-                
-                // Комната закрыта (ведущий ушел)
-                this.socket.on('room-closed', (message) => {
-                    this.showNotification(message, 'error');
-                    setTimeout(() => {
-                        location.reload(); // Перезагружаем страницу
-                    }, 3000);
-                });
-                
-                // Результат броска кубика
-                this.socket.on('dice-rolled', (data) => {
-                    this.diceResult = data.dice;
-                    const diceElement = document.getElementById('dice');
-                    if (diceElement) {
-                        diceElement.textContent = data.dice;
-                        diceElement.classList.add('rolling');
-                        
-                        setTimeout(() => {
-                            diceElement.classList.remove('rolling');
-                        }, 500);
-                    }
-                    
-                    // Обновляем тип задачи
-                    const taskNames = {
-                        1: 'Кухня', 2: 'Бар', 3: 'Знания', 
-                        4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
-                    };
-                    
-                    const taskTypeElement = document.getElementById('task-type');
-                    if (taskTypeElement) {
-                        taskTypeElement.textContent = taskNames[data.dice];
-                    }
-                    
-                    // Показываем карточку с вопросом
-                    setTimeout(() => this.drawCard(data.dice), 800);
-                    
-                    this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
-                });
-                
-                // Обновление состояния игры
-                this.socket.on('game-updated', (gameState) => {
-                    this.scores = gameState.scores || this.scores;
-                    this.positions = gameState.positions || this.positions;
-                    this.currentPlayer = gameState.currentPlayer || this.currentPlayer;
-                    this.diceResult = gameState.diceResult || this.diceResult;
-                    
-                    this.updateScores();
-                    this.updatePieces();
-                    this.updateTurnIndicator();
-                    
-                    // Обновляем кубик
-                    const diceElement = document.getElementById('dice');
-                    if (diceElement && this.diceResult > 0) {
-                        diceElement.textContent = this.diceResult;
-                    }
-                });
-                
-                // Смена хода
-                this.socket.on('turn-changed', (data) => {
-                    this.currentPlayer = data.currentPlayer;
-                    this.diceRolledInCurrentTurn = false;
-                    this.updateTurnIndicator();
-                    this.updateRollButton();
-                    this.showNotification(`Сейчас ходит ${data.playerName}`, 'info');
-                });
-                
-                // Новое сообщение в чате
-                this.socket.on('new-message', (data) => {
-                    this.addChatMessage(data.sender, data.message, data.time);
-                });
-                
-                // Ошибка
-                this.socket.on('error', (error) => {
-                    this.showAlert(error.message || 'Произошла ошибка');
-                    statusText.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка';
-                });
-                
-                // Статус комнаты
-                this.socket.on('room-status', (data) => {
-                    const roomStatus = modal.querySelector('#room-status');
-                    if (data.exists) {
-                        roomStatus.innerHTML = `<i class="fas fa-check-circle"></i> Комната найдена`;
-                        roomStatus.className = 'room-status found';
-                        
-                        // Показываем информацию о занятости ролей
-                        if (data.players) {
-                            let statusText = '';
-                            if (data.players.player1) statusText += 'Игрок 1 занят, ';
-                            if (data.players.player2) statusText += 'Игрок 2 занят';
-                            if (statusText) {
-                                roomStatus.innerHTML += `<br><small>${statusText}</small>`;
-                            }
-                        }
-                    } else {
-                        roomStatus.innerHTML = `<i class="fas fa-times-circle"></i> Комната не найдена`;
-                        roomStatus.className = 'room-status not-found';
-                    }
-                });
-                
-                // Пинг-понг для поддержания соединения
-                this.socket.on('pong', () => {
-                    // Соединение активно
-                });
-            };
-            
             // Проверка комнаты при вводе кода
             roomCodeInput.addEventListener('input', () => {
                 const code = roomCodeInput.value.trim().toUpperCase();
@@ -555,6 +330,217 @@ class Game {
         });
     }
     
+    setupSocketConnection(modal, resolve) {
+        console.log('🔌 Подключаемся к серверу:', this.serverUrl);
+        
+        const statusText = modal.querySelector('#status-text');
+        const statusDiv = modal.querySelector('#connection-status');
+        
+        // Создаем подключение Socket.io
+        this.socket = io(this.serverUrl, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000
+        });
+        
+        // Обработчики событий Socket.io
+        this.socket.on('connect', () => {
+            this.isConnected = true;
+            statusText.innerHTML = '<i class="fas fa-check-circle"></i> Подключено к серверу';
+            statusDiv.style.background = 'rgba(76, 175, 80, 0.2)';
+            statusDiv.style.color = '#4CAF50';
+            console.log('✅ Подключено к серверу');
+        });
+        
+        this.socket.on('connect_error', (error) => {
+            statusText.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Ошибка подключения: ${error.message}`;
+            statusDiv.style.background = 'rgba(244, 67, 54, 0.2)';
+            statusDiv.style.color = '#f44336';
+            console.error('❌ Ошибка подключения:', error);
+            
+            // Предлагаем переподключиться
+            setTimeout(() => {
+                if (!this.isConnected) {
+                    statusText.innerHTML = '<i class="fas fa-redo"></i> Пытаемся переподключиться...';
+                    this.socket.connect();
+                }
+            }, 3000);
+        });
+        
+        // Комната создана успешно (для ведущего)
+        this.socket.on('room-created', (data) => {
+            this.roomCode = data.roomCode;
+            this.playerName = data.playerName;
+            
+            // Показываем информацию о комнате
+            modal.querySelector('#room-info').style.display = 'block';
+            modal.querySelector('#room-code-display').textContent = data.roomCode;
+            
+            // Кнопка копирования кода
+            modal.querySelector('#copy-code-btn').addEventListener('click', () => {
+                navigator.clipboard.writeText(data.roomCode);
+                const copyBtn = modal.querySelector('#copy-code-btn');
+                const originalHTML = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i class="fas fa-check"></i> Скопировано!';
+                copyBtn.style.background = '#4CAF50';
+                setTimeout(() => {
+                    copyBtn.innerHTML = originalHTML;
+                    copyBtn.style.background = '';
+                }, 2000);
+            });
+            
+            statusText.innerHTML = '<i class="fas fa-check-circle"></i> Комната создана!';
+            
+            // Закрываем модальное окно через 3 секунды
+            setTimeout(() => {
+                modal.remove();
+                resolve();
+            }, 3000);
+        });
+        
+        // Успешное присоединение к комнате
+        this.socket.on('join-success', (data) => {
+            this.roomCode = data.roomCode;
+            this.playerName = data.playerName;
+            this.role = data.role;
+            
+            // Обновляем состояние игры с сервера
+            if (data.gameState) {
+                this.currentPlayer = data.gameState.currentPlayer;
+                this.scores = data.gameState.scores || this.scores;
+                this.positions = data.gameState.positions || this.positions;
+                this.diceResult = data.gameState.diceResult || 0;
+            }
+            
+            statusText.innerHTML = '<i class="fas fa-check-circle"></i> Вы в игре!';
+            
+            // Закрываем модальное окно
+            setTimeout(() => {
+                modal.remove();
+                resolve();
+            }, 2000);
+        });
+        
+        // Игрок присоединился к комнате
+        this.socket.on('player-joined', (data) => {
+            this.showNotification(`${data.playerName} присоединился как ${this.getRoleNameFromType(data.role)}`, 'info');
+            
+            // Обновляем видео-плейсхолдеры
+            this.updateVideoPlaceholders(data.players);
+        });
+        
+        // Игрок покинул комнату
+        this.socket.on('player-left', (data) => {
+            this.showNotification(`${data.playerName} покинул игру`, 'warning');
+            
+            // Обновляем видео-плейсхолдеры
+            if (data.role === 'player1') {
+                document.querySelector('#video-team1 .video-placeholder p').textContent = 'Команда 1';
+            } else if (data.role === 'player2') {
+                document.querySelector('#video-team2 .video-placeholder p').textContent = 'Команда 2';
+            }
+        });
+        
+        // Комната закрыта (ведущий ушел)
+        this.socket.on('room-closed', (message) => {
+            this.showNotification(message, 'error');
+            setTimeout(() => {
+                location.reload(); // Перезагружаем страницу
+            }, 3000);
+        });
+        
+        // Результат броска кубика
+        this.socket.on('dice-rolled', (data) => {
+            this.diceResult = data.dice;
+            const diceElement = document.getElementById('dice');
+            if (diceElement) {
+                diceElement.textContent = data.dice;
+                diceElement.classList.add('rolling');
+                
+                setTimeout(() => {
+                    diceElement.classList.remove('rolling');
+                }, 500);
+            }
+            
+            // Обновляем тип задачи
+            const taskNames = {
+                1: 'Кухня', 2: 'Бар', 3: 'Знания', 
+                4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+            };
+            
+            const taskTypeElement = document.getElementById('task-type');
+            if (taskTypeElement) {
+                taskTypeElement.textContent = taskNames[data.dice];
+            }
+            
+            // Показываем карточку с вопросом
+            setTimeout(() => this.drawCard(data.dice), 800);
+            
+            this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
+        });
+        
+        // Обновление состояния игры
+        this.socket.on('game-updated', (gameState) => {
+            this.scores = gameState.scores || this.scores;
+            this.positions = gameState.positions || this.positions;
+            this.currentPlayer = gameState.currentPlayer || this.currentPlayer;
+            this.diceResult = gameState.diceResult || this.diceResult;
+            
+            this.updateScores();
+            this.updatePieces();
+            this.updateTurnIndicator();
+            
+            // Обновляем кубик
+            const diceElement = document.getElementById('dice');
+            if (diceElement && this.diceResult > 0) {
+                diceElement.textContent = this.diceResult;
+            }
+        });
+        
+        // Смена хода
+        this.socket.on('turn-changed', (data) => {
+            this.currentPlayer = data.currentPlayer;
+            this.diceRolledInCurrentTurn = false;
+            this.updateTurnIndicator();
+            this.updateRollButton();
+            this.showNotification(`Сейчас ходит ${data.playerName}`, 'info');
+        });
+        
+        // Новое сообщение в чате
+        this.socket.on('new-message', (data) => {
+            this.addChatMessage(data.sender, data.message, data.time);
+        });
+        
+        // Ошибка
+        this.socket.on('error', (error) => {
+            this.showAlert(error.message || 'Произошла ошибка');
+            statusText.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ошибка';
+        });
+        
+        // Статус комнаты
+        this.socket.on('room-status', (data) => {
+            const roomStatus = modal.querySelector('#room-status');
+            if (data.exists) {
+                roomStatus.innerHTML = `<i class="fas fa-check-circle"></i> Комната найдена`;
+                roomStatus.className = 'room-status found';
+                
+                // Показываем информацию о занятости ролей
+                if (data.players) {
+                    let statusText = '';
+                    if (data.players.player1) statusText += 'Игрок 1 занят, ';
+                    if (data.players.player2) statusText += 'Игрок 2 занят';
+                    if (statusText) {
+                        roomStatus.innerHTML += `<br><small>${statusText}</small>`;
+                    }
+                }
+            } else {
+                roomStatus.innerHTML = `<i class="fas fa-times-circle"></i> Комната не найдена`;
+                roomStatus.className = 'room-status not-found';
+            }
+        });
+    }
+
     showAlert(message) {
         const alertDiv = document.createElement('div');
         alertDiv.className = 'alert';
