@@ -1,12 +1,13 @@
+<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Виртуальная настольная игра</title>
+    <title>Виртуальная настольная игра - Ресторатор</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/circletype@2.3.0/dist/circletype.min.js"></script>
+    <!-- ВАЖНО: Добавьте Socket.io перед вашим script.js -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
     <div class="game-container">
@@ -109,7 +110,7 @@
                     <h3 id="card-category"></h3>
                     <p id="card-question"></p>
                     <div class="card-instruction" id="card-instruction"></div>
-                    <button id="answer-received" class="btn answer-btn">Ответ получен</button>
+                    <button id="answer-received" class="btn answer-btn">Завершить ответ</button>
                 </div>
             </div>
         </div>
@@ -120,24 +121,24 @@
             <div class="points-control">
                 <div class="team-control">
                     <h4>Команда 1</h4>
-                   <div class="points-section">
-    <div class="plus-points">
-        <h5>Добавить очки:</h5>
-        <div class="points-buttons">
-            <button class="point-btn plus-btn" data-points="1" data-team="1">+1</button>
-            <button class="point-btn plus-btn" data-points="2" data-team="1">+2</button>
-            <button class="point-btn plus-btn" data-points="3" data-team="1">+3</button>
-        </div>
-    </div>
-    <div class="minus-points">
-        <h5>Вычесть очки:</h5>
-        <div class="points-buttons">
-            <button class="point-btn minus-btn" data-points="-1" data-team="1">-1</button>
-            <button class="point-btn minus-btn" data-points="-2" data-team="1">-2</button>
-            <button class="point-btn minus-btn" data-points="-3" data-team="1">-3</button>
-        </div>
-    </div>
-</div>
+                    <div class="points-section">
+                        <div class="plus-points">
+                            <h5>Добавить очки:</h5>
+                            <div class="points-buttons">
+                                <button class="point-btn plus-btn" data-points="1" data-team="1">+1</button>
+                                <button class="point-btn plus-btn" data-points="2" data-team="1">+2</button>
+                                <button class="point-btn plus-btn" data-points="3" data-team="1">+3</button>
+                            </div>
+                        </div>
+                        <div class="minus-points">
+                            <h5>Вычесть очки:</h5>
+                            <div class="points-buttons">
+                                <button class="point-btn minus-btn" data-points="-1" data-team="1">-1</button>
+                                <button class="point-btn minus-btn" data-points="-2" data-team="1">-2</button>
+                                <button class="point-btn minus-btn" data-points="-3" data-team="1">-3</button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="current-selection" id="team1-selection">
                         Выбрано: <span>0 очков</span>
                     </div>
