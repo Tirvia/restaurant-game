@@ -5,7 +5,6 @@ builder = "nixpacks"
 healthcheckPath = "/health"
 startCommand = "node server.js"
 
-# Необязательно, но полезно:
 [[services.ports]]
 port = 3000
 protocol = "tcp"
