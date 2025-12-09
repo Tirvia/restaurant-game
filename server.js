@@ -6,25 +6,25 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// Настройка CORS для Socket.io
+// ВАЖНО: Настройка CORS для Railway
 const io = socketIo(server, {
   cors: {
-    origin: "*", // В продакшене заменить на домены фронтенда
+    origin: "*", // Разрешаем все домены для тестирования
     methods: ["GET", "POST"],
     credentials: true
   },
   transports: ['websocket', 'polling']
 });
 
-// Раздаём статические файлы из папки public
+// Раздаем статические файлы
 app.use(express.static(path.join(__dirname, 'public')));
 
-// API для проверки здоровья
+// Проверка сервера
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    rooms: Array.from(rooms.keys()).length
+    message: 'Сервер игры ресторатора работает'
   });
 });
 
@@ -36,30 +36,12 @@ app.get('/', (req, res) => {
 // Хранилище комнат
 const rooms = new Map();
 
-// Очистка старых комнат каждые 10 минут
-setInterval(() => {
-  const now = Date.now();
-  const maxAge = 2 * 60 * 60 * 1000; // 2 часа
-  let deleted = 0;
-  
-  for (const [roomCode, room] of rooms.entries()) {
-    if (room.lastActivity && (now - room.lastActivity > maxAge)) {
-      rooms.delete(roomCode);
-      deleted++;
-    }
-  }
-  
-  if (deleted > 0) {
-    console.log(`🧹 Очищено ${deleted} неактивных комнат`);
-  }
-}, 10 * 60 * 1000);
-
 io.on('connection', (socket) => {
-  console.log('🎮 Новое подключение:', socket.id);
+  console.log('🎮 Новый игрок подключен:', socket.id);
 
-  // Создание комнаты (Ведущий)
+  // Создание комнаты
   socket.on('create-room', (playerName) => {
-    const roomCode = generateRoomCode();
+    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
     
     rooms.set(roomCode, {
       master: { id: socket.id, name: playerName },
@@ -85,18 +67,13 @@ io.on('connection', (socket) => {
     socket.emit('room-created', {
       roomCode,
       role: 'master',
-      playerName,
-      players: {
-        master: playerName,
-        player1: null,
-        player2: null
-      }
+      playerName
     });
 
     console.log(`✅ Комната создана: ${roomCode}, ведущий: ${playerName}`);
   });
 
-  // Присоединение к комнате (Игроки)
+  // Присоединение к комнате
   socket.on('join-room', ({ roomCode, playerName, role }) => {
     const room = rooms.get(roomCode);
     
@@ -105,34 +82,26 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Проверяем, доступна ли роль
     let assignedRole = role;
     let success = false;
     
-    switch(role) {
-      case 'player1':
-        if (!room.player1) {
-          room.player1 = { id: socket.id, name: playerName };
-          success = true;
-        }
-        break;
-      case 'player2':
-        if (!room.player2) {
-          room.player2 = { id: socket.id, name: playerName };
-          success = true;
-        }
-        break;
-      default:
-        // Автоназначение роли
-        if (!room.player1) {
-          assignedRole = 'player1';
-          room.player1 = { id: socket.id, name: playerName };
-          success = true;
-        } else if (!room.player2) {
-          assignedRole = 'player2';
-          room.player2 = { id: socket.id, name: playerName };
-          success = true;
-        }
+    if (role === 'player1' && !room.player1) {
+      room.player1 = { id: socket.id, name: playerName };
+      success = true;
+    } else if (role === 'player2' && !room.player2) {
+      room.player2 = { id: socket.id, name: playerName };
+      success = true;
+    } else {
+      // Автоназначение
+      if (!room.player1) {
+        assignedRole = 'player1';
+        room.player1 = { id: socket.id, name: playerName };
+        success = true;
+      } else if (!room.player2) {
+        assignedRole = 'player2';
+        room.player2 = { id: socket.id, name: playerName };
+        success = true;
+      }
     }
 
     if (!success) {
@@ -148,10 +117,9 @@ io.on('connection', (socket) => {
       id: socket.id
     };
 
-    // Обновляем активность комнаты
     room.lastActivity = Date.now();
 
-    // Отправляем успешное подключение
+    // Успешное подключение
     socket.emit('join-success', {
       roomCode,
       role: assignedRole,
@@ -164,7 +132,7 @@ io.on('connection', (socket) => {
       }
     });
 
-    // Уведомляем всех в комнате о новом игроке
+    // Уведомляем всех
     io.to(roomCode).emit('player-joined', {
       playerName,
       role: assignedRole,
@@ -178,7 +146,7 @@ io.on('connection', (socket) => {
     console.log(`✅ ${playerName} присоединился как ${assignedRole} в комнату ${roomCode}`);
   });
 
-  // Проверка существования комнаты
+  // Проверка комнаты
   socket.on('check-room', (roomCode) => {
     const room = rooms.get(roomCode);
     socket.emit('room-status', {
@@ -199,7 +167,6 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode);
     if (!room) return;
 
-    // Только текущий игрок или ведущий может бросать
     const currentPlayer = room.state.currentPlayer;
     const canRoll = 
       (role === 'master') ||
@@ -224,7 +191,7 @@ io.on('connection', (socket) => {
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult}`);
   });
 
-  // Обновление состояния игры (от ведущего)
+  // Обновление состояния игры
   socket.on('update-game', (gameState) => {
     const { roomCode, role } = socket.data;
     if (!roomCode || role !== 'master') return;
@@ -255,7 +222,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Чат
+  // Сообщения в чат
   socket.on('send-message', (message) => {
     const { roomCode, playerName } = socket.data;
     if (roomCode) {
@@ -267,7 +234,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Отслеживание активности
+  // Пинг для поддержания соединения
   socket.on('ping', () => {
     socket.emit('pong', { timestamp: Date.now() });
   });
@@ -283,7 +250,6 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     if (role === 'master') {
-      // Удаляем комнату при отключении ведущего
       rooms.delete(roomCode);
       io.to(roomCode).emit('room-closed', 'Ведущий покинул игру');
       console.log(`🗑️ Комната ${roomCode} удалена`);
@@ -297,19 +263,9 @@ io.on('connection', (socket) => {
   });
 });
 
-// Генератор кода комнаты
-function generateRoomCode() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
-// Порт из переменной окружения Railway или 3000
+// Порт для Railway
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log(`🌐 WebSocket доступен на ws://0.0.0.0:${PORT}`);
+  console.log(`🌐 WebSocket готов к подключениям`);
 });
