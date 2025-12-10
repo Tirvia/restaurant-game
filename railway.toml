@@ -3,8 +3,12 @@ builder = "nixpacks"
 
 [deploy]
 healthcheckPath = "/health"
+healthcheckTimeout = 60
+healthcheckInterval = 5
 startCommand = "node server.js"
 
-[[services.ports]]
+[[services]]
+http_port = 3000
+name = "web"
 port = 3000
-protocol = "tcp"
+type = "web"
