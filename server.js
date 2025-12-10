@@ -6,25 +6,25 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// ВАЖНО: Настройка CORS для Railway
+// Настройка CORS для Socket.io
 const io = socketIo(server, {
   cors: {
-    origin: "*", // Разрешаем все домены для тестирования
+    origin: "*",
     methods: ["GET", "POST"],
     credentials: true
   },
   transports: ['websocket', 'polling']
 });
 
-// Раздаем статические файлы
+// Раздаём статические файлы
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Проверка сервера
+// API для проверки здоровья
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    message: 'Сервер игры ресторатора работает'
+    rooms: Array.from(rooms.keys()).length
   });
 });
 
@@ -41,7 +41,7 @@ io.on('connection', (socket) => {
 
   // Создание комнаты
   socket.on('create-room', (playerName) => {
-    const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const roomCode = generateRoomCode();
     
     rooms.set(roomCode, {
       master: { id: socket.id, name: playerName },
@@ -167,11 +167,11 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode);
     if (!room) return;
 
+    // Только текущий игрок может бросать
     const currentPlayer = room.state.currentPlayer;
     const canRoll = 
-      (role === 'master') ||
-      (currentPlayer === 1 && role === 'player1') ||
-      (currentPlayer === 2 && role === 'player2');
+      (role === 'player1' && currentPlayer === 1) ||
+      (role === 'player2' && currentPlayer === 2);
 
     if (!canRoll) {
       socket.emit('error', { message: 'Сейчас не ваш ход' });
@@ -182,6 +182,7 @@ io.on('connection', (socket) => {
     room.state.diceResult = diceResult;
     room.lastActivity = Date.now();
 
+    // Отправляем результат всем в комнате
     io.to(roomCode).emit('dice-rolled', {
       dice: diceResult,
       player: currentPlayer,
@@ -189,6 +190,14 @@ io.on('connection', (socket) => {
     });
 
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult}`);
+  });
+
+  // Игрок завершил ответ
+  socket.on('answer-completed', () => {
+    const { roomCode, role } = socket.data;
+    if (!roomCode) return;
+    
+    console.log(`✅ Игрок ${role} завершил ответ в комнате ${roomCode}`);
   });
 
   // Обновление состояния игры
@@ -225,18 +234,13 @@ io.on('connection', (socket) => {
   // Сообщения в чат
   socket.on('send-message', (message) => {
     const { roomCode, playerName } = socket.data;
-    if (roomCode) {
+    if (roomCode && playerName) {
       io.to(roomCode).emit('new-message', {
         sender: playerName,
         message: message,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     }
-  });
-
-  // Пинг для поддержания соединения
-  socket.on('ping', () => {
-    socket.emit('pong', { timestamp: Date.now() });
   });
 
   // Отключение
@@ -250,6 +254,7 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     if (role === 'master') {
+      // Удаляем комнату
       rooms.delete(roomCode);
       io.to(roomCode).emit('room-closed', 'Ведущий покинул игру');
       console.log(`🗑️ Комната ${roomCode} удалена`);
@@ -263,9 +268,18 @@ io.on('connection', (socket) => {
   });
 });
 
-// Порт для Railway
+// Генератор кода комнаты
+function generateRoomCode() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log(`🌐 WebSocket готов к подключениям`);
+  console.log(`🌐 WebSocket доступен на ws://0.0.0.0:${PORT}`);
 });
