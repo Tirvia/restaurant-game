@@ -96,65 +96,41 @@ class Game {
                     
                     <div class="mode-options">
                         <div class="mode-option">
-                            <input type="radio" id="mode-online" name="mode" value="online">
-                            <label for="mode-online" class="mode-label">
+                            <button class="mode-btn" data-mode="online">
                                 <i class="fas fa-globe"></i>
                                 <div>
                                     <strong>Онлайн-игра</strong>
                                     <small>Игра по сети с друзьями</small>
-                                    <div class="mode-details">
-                                        <p><i class="fas fa-check"></i> 3 игрока: ведущий + 2 команды</p>
-                                        <p><i class="fas fa-check"></i> Видеосвязь</p>
-                                        <p><i class="fas fa-check"></i> Чат</p>
-                                    </div>
                                 </div>
-                            </label>
+                            </button>
                         </div>
                         
                         <div class="mode-option">
-                            <input type="radio" id="mode-local" name="mode" value="local">
-                            <label for="mode-local" class="mode-label">
+                            <button class="mode-btn" data-mode="local">
                                 <i class="fas fa-desktop"></i>
                                 <div>
                                     <strong>Один компьютер</strong>
                                     <small>Игра на одном устройстве</small>
-                                    <div class="mode-details">
-                                        <p><i class="fas fa-check"></i> Все роли на одном экране</p>
-                                        <p><i class="fas fa-check"></i> Без подключения к интернету</p>
-                                        <p><i class="fas fa-check"></i> Для обучения и практики</p>
-                                    </div>
                                 </div>
-                            </label>
+                            </button>
                         </div>
                     </div>
                     
-                    <button id="select-mode" class="btn" style="background: #4CAF50; width: 100%; margin-top: 20px;">
-                        <i class="fas fa-arrow-right"></i> Продолжить
-                    </button>
+                    <div class="game-info">
+                        <p><i class="fas fa-info-circle"></i> Для онлайн-игры нужно 3 человека: ведущий и 2 игрока</p>
+                    </div>
                 </div>
             `;
             
             document.body.appendChild(modal);
             
-            const selectBtn = document.getElementById('select-mode');
+            const modeButtons = modal.querySelectorAll('.mode-btn');
             
-            selectBtn.addEventListener('click', () => {
-                const selectedMode = modal.querySelector('input[name="mode"]:checked')?.value;
-                
-                if (!selectedMode) {
-                    alert('Пожалуйста, выберите режим игры');
-                    return;
-                }
-                
-                this.gameMode = selectedMode;
-                modal.remove();
-                resolve();
-            });
-            
-            // Автовыбор при нажатии на опцию
-            modal.querySelectorAll('.mode-option input').forEach(input => {
-                input.addEventListener('change', () => {
-                    selectBtn.style.display = 'block';
+            modeButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.gameMode = btn.dataset.mode;
+                    modal.remove();
+                    resolve();
                 });
             });
         });
@@ -199,13 +175,6 @@ class Game {
                 <div class="role-selection-content">
                     <h2><i class="fas fa-gamepad"></i> Подключение к игре</h2>
                     
-                    <div class="connection-info">
-                        <div class="server-status">
-                            <i class="fas fa-server"></i>
-                            <span>Сервер: ${this.serverUrl}</span>
-                        </div>
-                    </div>
-                    
                     <!-- Ввод имени -->
                     <div class="name-input-section">
                         <label for="player-name"><i class="fas fa-user"></i> Введите ваше имя:</label>
@@ -216,38 +185,29 @@ class Game {
                     <div class="role-options">
                         <h3><i class="fas fa-user-tag"></i> Выберите роль:</h3>
                         
-                        <div class="role-option">
-                            <input type="radio" id="role-master" name="role" value="master">
-                            <label for="role-master" class="role-label">
-                                <i class="fas fa-crown"></i>
-                                <div>
-                                    <strong>Ведущий</strong>
-                                    <small>Создаёт комнату и управляет игрой</small>
-                                </div>
-                            </label>
-                        </div>
+                        <button class="role-btn" data-role="master">
+                            <i class="fas fa-crown"></i>
+                            <div>
+                                <strong>Ведущий</strong>
+                                <small>Создаёт комнату и управляет игрой</small>
+                            </div>
+                        </button>
                         
-                        <div class="role-option">
-                            <input type="radio" id="role-player1" name="role" value="player1">
-                            <label for="role-player1" class="role-label">
-                                <i class="fas fa-user-friends"></i>
-                                <div>
-                                    <strong>Игрок 1</strong>
-                                    <small>Команда 1 (синие)</small>
-                                </div>
-                            </label>
-                        </div>
+                        <button class="role-btn" data-role="player1">
+                            <i class="fas fa-user-friends"></i>
+                            <div>
+                                <strong>Игрок 1</strong>
+                                <small>Команда 1 (синие)</small>
+                            </div>
+                        </button>
                         
-                        <div class="role-option">
-                            <input type="radio" id="role-player2" name="role" value="player2">
-                            <label for="role-player2" class="role-label">
-                                <i class="fas fa-user-friends"></i>
-                                <div>
-                                    <strong>Игрок 2</strong>
-                                    <small>Команда 2 (оранжевые)</small>
-                                </div>
-                            </label>
-                        </div>
+                        <button class="role-btn" data-role="player2">
+                            <i class="fas fa-user-friends"></i>
+                            <div>
+                                <strong>Игрок 2</strong>
+                                <small>Команда 2 (оранжевые)</small>
+                            </div>
+                        </button>
                     </div>
                     
                     <!-- Секция для ведущего -->
@@ -287,6 +247,11 @@ class Game {
                         <span id="status-text">Подключение к серверу...</span>
                     </div>
                     
+                    <!-- Информация об игре -->
+                    <div class="game-info">
+                        <p><i class="fas fa-info-circle"></i> Для игры нужно 3 человека: ведущий и 2 игрока</p>
+                    </div>
+                    
                     <button id="back-to-mode" class="btn" style="background: #666; width: 100%; margin-top: 10px;">
                         <i class="fas fa-arrow-left"></i> Назад к выбору режима
                     </button>
@@ -297,7 +262,7 @@ class Game {
             
             // Элементы DOM
             const nameInput = document.getElementById('player-name');
-            const roleInputs = modal.querySelectorAll('input[name="role"]');
+            const roleBtns = modal.querySelectorAll('.role-btn');
             const masterSection = modal.querySelector('#master-section');
             const playerSection = modal.querySelector('#player-section');
             const createBtn = modal.querySelector('#create-room-btn');
@@ -321,9 +286,14 @@ class Game {
             this.setupSocketConnection(modal, resolve);
             
             // Показать/скрыть секции
-            roleInputs.forEach(input => {
-                input.addEventListener('change', () => {
-                    this.role = input.value;
+            roleBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.role = btn.dataset.role;
+                    
+                    // Снять выделение со всех кнопок
+                    roleBtns.forEach(b => b.classList.remove('selected'));
+                    // Выделить текущую
+                    btn.classList.add('selected');
                     
                     if (this.role === 'master') {
                         masterSection.style.display = 'block';
@@ -346,6 +316,7 @@ class Game {
                 }
                 
                 this.playerName = playerName;
+                this.role = 'master';
                 
                 statusText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Создаем комнату...';
                 this.socket.emit('create-room', playerName);
@@ -355,7 +326,6 @@ class Game {
             joinBtn.addEventListener('click', () => {
                 const playerName = nameInput.value.trim();
                 const roomCode = roomCodeInput.value.trim().toUpperCase();
-                const selectedRole = modal.querySelector('input[name="role"]:checked')?.value;
                 
                 if (!playerName) {
                     this.showAlert('Пожалуйста, введите имя');
@@ -367,20 +337,19 @@ class Game {
                     return;
                 }
                 
-                if (!selectedRole) {
+                if (!this.role) {
                     this.showAlert('Пожалуйста, выберите роль');
                     return;
                 }
                 
                 this.playerName = playerName;
-                this.role = selectedRole;
                 this.roomCode = roomCode;
                 
                 statusText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Присоединяемся к комнате...';
                 this.socket.emit('join-room', {
                     roomCode: roomCode,
                     playerName: playerName,
-                    role: selectedRole
+                    role: this.role
                 });
             });
             
@@ -530,8 +499,51 @@ class Game {
             this.updateVideoPlaceholders(data.players);
         });
         
+        this.socket.on('player-left', (data) => {
+            this.showNotification(`${data.playerName} покинул игру`, 'warning');
+            
+            // Обновляем видео-плейсхолдеры
+            if (data.role === 'player1') {
+                document.querySelector('#video-team1 .video-placeholder p').textContent = 'Команда 1';
+            } else if (data.role === 'player2') {
+                document.querySelector('#video-team2 .video-placeholder p').textContent = 'Команда 2';
+            }
+        });
+        
+        this.socket.on('room-closed', (message) => {
+            this.showNotification(message, 'error');
+            setTimeout(() => {
+                location.reload(); // Перезагружаем страницу
+            }, 3000);
+        });
+        
         this.socket.on('dice-rolled', (data) => {
-            this.handleDiceRolled(data);
+            this.diceResult = data.dice;
+            const diceElement = document.getElementById('dice');
+            if (diceElement) {
+                diceElement.textContent = data.dice;
+                diceElement.classList.add('rolling');
+                
+                setTimeout(() => {
+                    diceElement.classList.remove('rolling');
+                }, 500);
+            }
+            
+            // Обновляем тип задачи
+            const taskNames = {
+                1: 'Кухня', 2: 'Бар', 3: 'Знания', 
+                4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+            };
+            
+            const taskTypeElement = document.getElementById('task-type');
+            if (taskTypeElement) {
+                taskTypeElement.textContent = taskNames[data.dice];
+            }
+            
+            // Показываем карточку с вопросом
+            setTimeout(() => this.drawCard(data.dice), 800);
+            
+            this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
         });
         
         this.socket.on('game-updated', (gameState) => {
@@ -571,6 +583,16 @@ class Game {
             if (data.exists) {
                 roomStatus.innerHTML = `<i class="fas fa-check-circle"></i> Комната найдена`;
                 roomStatus.className = 'room-status found';
+                
+                // Показываем информацию о занятости ролей
+                if (data.players) {
+                    let statusText = '';
+                    if (data.players.player1) statusText += 'Игрок 1 занят, ';
+                    if (data.players.player2) statusText += 'Игрок 2 занят';
+                    if (statusText) {
+                        roomStatus.innerHTML += `<br><small>${statusText}</small>`;
+                    }
+                }
             } else {
                 roomStatus.innerHTML = `<i class="fas fa-times-circle"></i> Комната не найдена`;
                 roomStatus.className = 'room-status not-found';
@@ -578,44 +600,139 @@ class Game {
         });
     }
 
-    handleDiceRolled(data) {
-        this.diceResult = data.dice;
-        const diceElement = document.getElementById('dice');
-        if (diceElement) {
-            diceElement.textContent = data.dice;
-            diceElement.classList.add('rolling');
+    async initVideo() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 320 },
+                    height: { ideal: 240 },
+                    facingMode: "user"
+                },
+                audio: false
+            });
             
-            setTimeout(() => {
-                diceElement.classList.remove('rolling');
-            }, 500);
+            const videoElement = document.createElement('video');
+            videoElement.autoplay = true;
+            videoElement.muted = true;
+            videoElement.playsInline = true;
+            videoElement.srcObject = stream;
+            
+            const roleMap = {
+                'master': 'video-master',
+                'player1': 'video-team1',
+                'player2': 'video-team2'
+            };
+            
+            const containerId = roleMap[this.role];
+            if (containerId) {
+                const container = document.getElementById(containerId);
+                if (container) {
+                    const placeholder = container.querySelector('.video-placeholder');
+                    if (placeholder) {
+                        const icon = placeholder.querySelector('i');
+                        if (icon) icon.style.display = 'none';
+                        
+                        const text = placeholder.querySelector('p');
+                        if (text) {
+                            text.innerHTML = this.role === 'master' 
+                                ? `<i class="fas fa-crown"></i> ${this.playerName} (Ведущий)`
+                                : `<i class="fas fa-user"></i> ${this.playerName} (Команда ${this.role === 'player1' ? '1' : '2'})`;
+                        }
+                        
+                        videoElement.style.width = '100%';
+                        videoElement.style.height = '100%';
+                        videoElement.style.objectFit = 'cover';
+                        videoElement.style.borderRadius = '10px';
+                        placeholder.appendChild(videoElement);
+                    }
+                }
+            }
+
+        } catch (error) {
+            console.log('Камера недоступна:', error);
+            this.createDemoVideos();
         }
-        
-        const taskNames = {
-            1: 'Кухня', 2: 'Бар', 3: 'Знания', 
-            4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+    }
+
+    updateVideoPlaceholders(players) {
+        if (players.master && this.role !== 'master') {
+            const masterPlaceholder = document.querySelector('#video-master .video-placeholder p');
+            if (masterPlaceholder) {
+                masterPlaceholder.innerHTML = `<i class="fas fa-crown"></i> ${players.master}`;
+            }
+        }
+
+        if (players.player1 && this.role !== 'player1') {
+            const player1Placeholder = document.querySelector('#video-team1 .video-placeholder p');
+            if (player1Placeholder) {
+                player1Placeholder.innerHTML = `<i class="fas fa-user"></i> ${players.player1}`;
+            }
+        }
+
+        if (players.player2 && this.role !== 'player2') {
+            const player2Placeholder = document.querySelector('#video-team2 .video-placeholder p');
+            if (player2Placeholder) {
+                player2Placeholder.innerHTML = `<i class="fas fa-user"></i> ${players.player2}`;
+            }
+        }
+    }
+
+    createDemoVideos() {
+        const demoColors = {
+            'master': '#FF9800',
+            'player1': '#2196F3',
+            'player2': '#FF5722'
         };
         
-        const taskTypeElement = document.getElementById('task-type');
-        if (taskTypeElement) {
-            taskTypeElement.textContent = taskNames[data.dice];
-        }
+        Object.entries(demoColors).forEach(([role, color]) => {
+            if (role !== this.role) {
+                const roleMap = {
+                    'master': 'video-master',
+                    'player1': 'video-team1',
+                    'player2': 'video-team2'
+                };
+                
+                const containerId = roleMap[role];
+                if (containerId) {
+                    const container = document.getElementById(containerId);
+                    if (container) {
+                        const placeholder = container.querySelector('.video-placeholder');
+                        if (placeholder) {
+                            placeholder.style.background = `linear-gradient(135deg, ${color} 0%, ${this.darkenColor(color, 30)} 100%)`;
+                            
+                            const icon = placeholder.querySelector('i');
+                            if (icon) {
+                                icon.style.display = 'block';
+                                icon.style.color = 'white';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    darkenColor(color, percent) {
+        const num = parseInt(color.replace("#", ""), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = (num >> 16) - amt;
+        const G = (num >> 8 & 0x00FF) - amt;
+        const B = (num & 0x0000FF) - amt;
         
-        // Показываем карточку только если:
-        // 1. Это текущий игрок (который должен отвечать)
-        // 2. Это ведущий (чтобы видеть вопрос)
-        // 3. Это локальная игра (всем)
-        
-        const shouldShowCard = this.gameMode === 'local' || 
-                              this.role === 'master' || 
-                              (this.role === 'player1' && this.currentPlayer === 1) ||
-                              (this.role === 'player2' && this.currentPlayer === 2);
-        
-        if (shouldShowCard) {
-            setTimeout(() => this.drawCard(data.dice), 800);
-        }
-        
-        if (this.gameMode === 'online') {
-            this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
+        return "#" + (
+            0x1000000 +
+            (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+            (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+            (B < 255 ? B < 1 ? 0 : B : 255)
+        ).toString(16).slice(1);
+    }
+
+    getRoleNameFromType(roleType) {
+        switch(roleType) {
+            case 'master': return 'Ведущий';
+            case 'player1': return 'Игрок 1';
+            case 'player2': return 'Игрок 2';
+            default: return 'Игрок';
         }
     }
 
@@ -671,425 +788,7 @@ class Game {
         }
     }
 
-    drawCard(type) {
-        const cards = this.cards[type];
-        if (!cards || cards.length === 0) return;
-        
-        const randomCard = cards[Math.floor(Math.random() * cards.length)];
-        const modal = document.getElementById('card-modal');
-        if (!modal) return;
-        
-        const cardContent = modal.querySelector('.card-content');
-        if (!cardContent) return;
-        
-        document.getElementById('card-dice').textContent = type;
-        document.getElementById('card-category').textContent = this.getCategoryName(type);
-        document.getElementById('card-question').textContent = randomCard.question;
-        document.getElementById('card-instruction').textContent = randomCard.instruction || '';
-        
-        // Настраиваем кнопку в зависимости от роли
-        const answerBtn = document.getElementById('answer-received');
-        
-        if (this.role === 'master' || this.gameMode === 'local') {
-            answerBtn.textContent = 'Приступить к оцениванию';
-            answerBtn.onclick = () => {
-                clearInterval(this.timerInterval);
-                this.hideCard();
-                this.showMasterPanel();
-            };
-        } else {
-            answerBtn.textContent = 'Завершить ответ';
-            answerBtn.onclick = () => this.stopTimerAndCloseCard();
-        }
-        
-        modal.classList.add('active');
-        
-        setTimeout(() => {
-            cardContent.classList.add('flipped');
-            this.startTimer();
-        }, 1000);
-    }
-
-    stopTimerAndCloseCard() {
-        clearInterval(this.timerInterval);
-        this.hideCard();
-        
-        if (this.gameMode === 'online' && this.role !== 'master') {
-            const rollBtn = document.getElementById('roll-dice');
-            if (rollBtn) {
-                rollBtn.disabled = true;
-                rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте оценки ведущего';
-            }
-            this.showNotification('Ответ отправлен ведущему. Ожидайте оценки...', 'info');
-            
-            // В онлайн-режиме уведомляем сервер, что ответ завершен
-            if (this.socket && this.isConnected) {
-                this.socket.emit('answer-completed');
-            }
-        } else {
-            // В локальном режиме сразу показываем панель ведущего
-            this.showMasterPanel();
-        }
-    }
-
-    rollDice() {
-        console.log('🎲 Бросок кубика...');
-        
-        // В онлайн-режиме: только текущий игрок может бросать
-        // В локальном режиме: бросает тот, чей сейчас ход
-        if (this.gameMode === 'online') {
-            if (!this.socket || !this.isConnected) {
-                alert('Нет подключения к серверу!');
-                return;
-            }
-            
-            const canRoll = (this.role === 'player1' && this.currentPlayer === 1) ||
-                           (this.role === 'player2' && this.currentPlayer === 2);
-            
-            if (!canRoll) {
-                alert('Сейчас не ваш ход!');
-                return;
-            }
-            
-            if (this.diceRolledInCurrentTurn) {
-                alert('В этом ходе кубик уже брошен!');
-                return;
-            }
-            
-            this.socket.emit('roll-dice');
-            this.diceRolledInCurrentTurn = true;
-            
-        } else {
-            // Локальный режим
-            if (this.diceRolledInCurrentTurn) {
-                alert('В этом ходе кубик уже брошен!');
-                return;
-            }
-            
-            const diceElement = document.getElementById('dice');
-            if (!diceElement) return;
-            
-            diceElement.classList.add('rolling');
-            
-            setTimeout(() => {
-                this.diceResult = Math.floor(Math.random() * 6) + 1;
-                diceElement.textContent = this.diceResult;
-                diceElement.classList.remove('rolling');
-                
-                const taskNames = {
-                    1: 'Кухня', 2: 'Бар', 3: 'Знания', 
-                    4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
-                };
-                
-                const taskTypeElement = document.getElementById('task-type');
-                if (taskTypeElement) {
-                    taskTypeElement.textContent = taskNames[this.diceResult];
-                }
-                
-                this.diceRolledInCurrentTurn = true;
-                setTimeout(() => this.drawCard(this.diceResult), 500);
-            }, 1500);
-        }
-        
-        this.updateRollButton();
-    }
-
-    updateRollButton() {
-        const rollBtn = document.getElementById('roll-dice');
-        if (!rollBtn) return;
-        
-        if (this.gameMode === 'local') {
-            // В локальном режиме: бросает тот, чей сейчас ход
-            const canRoll = !this.diceRolledInCurrentTurn;
-            rollBtn.disabled = !canRoll;
-            
-            if (rollBtn.disabled) {
-                rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Кубик уже брошен';
-            } else {
-                rollBtn.innerHTML = `<i class="fas fa-dice"></i> Бросить кубик (Ход команды ${this.currentPlayer})`;
-            }
-            
-        } else if (this.gameMode === 'online') {
-            const isPlayer1 = this.role === 'player1';
-            const isPlayer2 = this.role === 'player2';
-            const isMaster = this.role === 'master';
-            
-            // Только игроки могут бросать, ведущий - нет
-            const canRoll = (isPlayer1 && this.currentPlayer === 1) ||
-                           (isPlayer2 && this.currentPlayer === 2);
-            const canRollNow = canRoll && !this.diceRolledInCurrentTurn;
-            
-            rollBtn.disabled = !canRollNow || isMaster;
-            
-            if (rollBtn.disabled) {
-                if (isMaster) {
-                    rollBtn.innerHTML = '<i class="fas fa-dice"></i> Бросок кубика (только игроки)';
-                } else if (!canRoll) {
-                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте хода';
-                } else if (this.diceRolledInCurrentTurn) {
-                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте оценки';
-                }
-            } else {
-                rollBtn.innerHTML = '<i class="fas fa-dice"></i> Бросить кубик';
-            }
-        }
-    }
-
-    updateLocalRollButton() {
-        const rollBtn = document.getElementById('roll-dice');
-        if (rollBtn) {
-            rollBtn.innerHTML = `<i class="fas fa-dice"></i> Бросить кубик (Ход команды ${this.currentPlayer})`;
-        }
-    }
-
-    applySelectedPoints() {
-        if (this.gameMode === 'online' && this.role !== 'master') {
-            alert('Только ведущий может применять очки!');
-            return;
-        }
-        
-        if (this.applyButtonClicked) {
-            alert('Очки уже применены в этом ходе!');
-            return;
-        }
-        
-        if (this.selectedPoints[1] === 0 && this.selectedPoints[2] === 0) {
-            alert('Сначала выберите очки для команд!');
-            return;
-        }
-        
-        for (let team of [1, 2]) {
-            const points = this.selectedPoints[team];
-            if (points !== 0) {
-                this.scores[team] += points;
-                this.movePiece(team, points);
-            }
-        }
-        
-        this.updateScores();
-        this.pointsApplied = true;
-        this.applyButtonClicked = true;
-        
-        // Блокируем кнопки
-        document.querySelectorAll('.point-btn').forEach(btn => {
-            btn.disabled = true;
-        });
-        
-        const applyBtn = document.getElementById('apply-points');
-        if (applyBtn) {
-            applyBtn.disabled = true;
-            applyBtn.style.opacity = '0.6';
-        }
-        
-        const nextTurnBtn = document.getElementById('next-turn');
-        if (nextTurnBtn) nextTurnBtn.disabled = false;
-        
-        // Отправляем обновленное состояние на сервер (в онлайн-режиме)
-        if (this.gameMode === 'online' && this.socket && this.isConnected) {
-            const gameState = {
-                scores: this.scores,
-                positions: this.positions,
-                currentPlayer: this.currentPlayer,
-                diceResult: this.diceResult
-            };
-            
-            this.socket.emit('update-game', gameState);
-        }
-        
-        // Проверяем победителя (позиция >= 40)
-        for (let team of [1, 2]) {
-            if (this.positions[team] >= 40) {
-                this.showWinner(team);
-            }
-        }
-    }
-
-    nextTurn() {
-        if (this.gameMode === 'online' && this.role !== 'master') {
-            alert('Только ведущий может переходить к следующему ходу!');
-            return;
-        }
-        
-        // Отправляем запрос на смену хода на сервер (в онлайн-режиме)
-        if (this.gameMode === 'online' && this.socket && this.isConnected) {
-            this.socket.emit('next-turn');
-        }
-        
-        // Обновляем локальное состояние
-        const panel = document.getElementById('master-panel');
-        if (panel) panel.style.display = 'none';
-        
-        this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
-        this.specialZoneQueue = [];
-        this.showingSpecialZone = false;
-        
-        this.diceRolledInCurrentTurn = false;
-        this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
-        
-        this.updateTurnIndicator();
-        this.updateRollButton();
-        
-        clearInterval(this.timerInterval);
-        
-        const timer = document.getElementById('timer');
-        if (timer) timer.textContent = '60';
-        
-        const dice = document.getElementById('dice');
-        if (dice) dice.textContent = '?';
-        
-        const taskType = document.getElementById('task-type');
-        if (taskType) taskType.textContent = '';
-        
-        this.resetSelection();
-        this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
-    }
-
-    setupEventListeners() {
-        console.log('🔧 Настройка обработчиков событий...');
-        
-        const rollDiceBtn = document.getElementById('roll-dice');
-        if (rollDiceBtn) {
-            rollDiceBtn.addEventListener('click', () => this.rollDice());
-        }
-        
-        const answerBtn = document.getElementById('answer-received');
-        if (answerBtn) {
-            // Текст устанавливается в drawCard
-        }
-        
-        document.querySelectorAll('.point-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                if (this.pointsApplied || this.applyButtonClicked) return;
-                
-                const points = parseInt(e.target.dataset.points);
-                const team = parseInt(e.target.dataset.team);
-                this.selectPoints(team, points);
-            });
-        });
-        
-        const applyBtn = document.getElementById('apply-points');
-        if (applyBtn) {
-            applyBtn.addEventListener('click', () => this.applySelectedPoints());
-        }
-        
-        const nextTurnBtn = document.getElementById('next-turn');
-        if (nextTurnBtn) {
-            nextTurnBtn.addEventListener('click', () => this.nextTurn());
-        }
-        
-        window.addEventListener('resize', () => this.drawBoard());
-        
-        // Чат (только в онлайн-режиме)
-        if (this.gameMode === 'online') {
-            const sendMessageBtn = document.getElementById('send-message-btn');
-            const chatInput = document.getElementById('chat-input');
-            
-            if (sendMessageBtn && chatInput) {
-                sendMessageBtn.addEventListener('click', () => this.sendChatMessage());
-                chatInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        this.sendChatMessage();
-                    }
-                });
-            }
-        }
-        
-        // Пинг серверу для поддержания соединения
-        if (this.gameMode === 'online') {
-            setInterval(() => {
-                if (this.socket && this.socket.connected) {
-                    this.socket.emit('ping');
-                }
-            }, 30000);
-        }
-    }
-
-    setupChat() {
-        // Создаем контейнер для чата только в онлайн-режиме
-        if (this.gameMode !== 'online') return;
-        
-        if (!document.getElementById('chat-container')) {
-            const chatContainer = document.createElement('div');
-            chatContainer.id = 'chat-container';
-            chatContainer.className = 'chat-container';
-            chatContainer.innerHTML = `
-                <div class="chat-header">
-                    <h4><i class="fas fa-comments"></i> Чат игры</h4>
-                    <button id="toggle-chat" class="chat-toggle">
-                        <i class="fas fa-chevron-up"></i>
-                    </button>
-                </div>
-                <div class="chat-messages" id="chat-messages">
-                    <div class="chat-system-message">
-                        <i class="fas fa-info-circle"></i> Чат подключен
-                    </div>
-                </div>
-                <div class="chat-input">
-                    <input type="text" id="chat-input" placeholder="Введите сообщение..." maxlength="200">
-                    <button id="send-message-btn" class="send-btn">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </div>
-            `;
-            
-            const gameContainer = document.querySelector('.game-container');
-            if (gameContainer) {
-                gameContainer.appendChild(chatContainer);
-            }
-            
-            const toggleBtn = document.getElementById('toggle-chat');
-            const chatMessages = document.getElementById('chat-messages');
-            
-            if (toggleBtn && chatMessages) {
-                toggleBtn.addEventListener('click', () => {
-                    const isHidden = chatMessages.style.display === 'none';
-                    chatMessages.style.display = isHidden ? 'block' : 'none';
-                    toggleBtn.innerHTML = isHidden ? 
-                        '<i class="fas fa-chevron-up"></i>' : 
-                        '<i class="fas fa-chevron-down"></i>';
-                });
-            }
-        }
-    }
-
-    sendChatMessage() {
-        if (this.gameMode !== 'online') return;
-        
-        const chatInput = document.getElementById('chat-input');
-        if (!chatInput || !this.socket || !this.isConnected) return;
-        
-        const message = chatInput.value.trim();
-        if (!message) return;
-        
-        this.socket.emit('send-message', message);
-        chatInput.value = '';
-        chatInput.focus();
-    }
-
-    addChatMessage(sender, message, timestamp) {
-        if (this.gameMode !== 'online') return;
-        
-        const chatMessages = document.getElementById('chat-messages');
-        if (!chatMessages) return;
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `chat-message ${sender === this.playerName ? 'own-message' : ''}`;
-        
-        const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        messageDiv.innerHTML = `
-            <div class="message-header">
-                <span class="message-sender">${sender === this.playerName ? 'Вы' : sender}</span>
-                <span class="message-time">${time}</span>
-            </div>
-            <div class="message-text">${message}</div>
-        `;
-        
-        chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-      createBoard() {
+    createBoard() {
         const container = document.getElementById('cells-container');
         if (!container) return;
         
@@ -2235,10 +1934,6 @@ class Game {
             setTimeout(() => notification.remove(), 300);
         }, 3000);
     }
-} // Остальные методы остаются без изменений (createBoard, generateBoardPositions, drawBoard, и т.д.)
-    // Добавьте их из предыдущей версии кода...
-
-    // ... (все остальные методы из предыдущей версии остаются без изменений)
 }
 
 // Запускаем игру
