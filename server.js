@@ -16,8 +16,8 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
-// Раздаём статические файлы
-app.use(express.static(path.join(__dirname, 'public')));
+// Раздаём статические файлы из текущей директории
+app.use(express.static(__dirname));
 
 // API для проверки здоровья
 app.get('/health', (req, res) => {
@@ -30,7 +30,7 @@ app.get('/health', (req, res) => {
 
 // Главная страница
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Хранилище комнат
@@ -160,8 +160,7 @@ io.on('connection', (socket) => {
   });
 
   // Бросок кубика
- // В событии roll-dice замените текущий код на:
-socket.on('roll-dice', () => {
+  socket.on('roll-dice', () => {
     const { roomCode, role } = socket.data;
     if (!roomCode) return;
     
@@ -171,42 +170,28 @@ socket.on('roll-dice', () => {
     // Только текущий игрок может бросать
     const currentPlayer = room.state.currentPlayer;
     const canRoll = 
-        (role === 'player1' && currentPlayer === 1) ||
-        (role === 'player2' && currentPlayer === 2);
+      (role === 'player1' && currentPlayer === 1) ||
+      (role === 'player2' && currentPlayer === 2);
 
     if (!canRoll) {
-        socket.emit('error', { message: 'Сейчас не ваш ход' });
-        return;
+      socket.emit('error', { message: 'Сейчас не ваш ход' });
+      return;
     }
 
     const diceResult = Math.floor(Math.random() * 6) + 1;
-    
-    // Выбираем случайную карточку из соответствующей категории
-    const categories = {
-        1: ['Кухня', [/* вопросы для кухни */]],
-        2: ['Бар', [/* вопросы для бара */]],
-        3: ['Знания', [/* вопросы для знаний */]],
-        4: ['Ситуация', [/* вопросы для ситуации */]],
-        5: ['Сервис', [/* вопросы для сервиса */]],
-        6: ['Продажи', [/* вопросы для продаж */]]
-    };
-    
-    // Здесь должна быть ваша логика выбора карточки
-    // Для примера, просто отправляем категорию
     room.state.diceResult = diceResult;
-    room.state.currentCardCategory = diceResult;
     room.lastActivity = Date.now();
 
     // Отправляем результат всем в комнате
     io.to(roomCode).emit('dice-rolled', {
-        dice: diceResult,
-        player: currentPlayer,
-        playerName: currentPlayer === 1 ? room.player1?.name : room.player2?.name,
-        cardCategory: diceResult
+      dice: diceResult,
+      player: currentPlayer,
+      playerName: currentPlayer === 1 ? room.player1?.name : room.player2?.name
     });
 
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult}`);
-});
+  });
+
   // Игрок завершил ответ
   socket.on('answer-completed', () => {
     const { roomCode, role } = socket.data;
@@ -247,18 +232,16 @@ socket.on('roll-dice', () => {
   });
 
   // Сообщения в чат
-// Сообщения в чат
-socket.on('send-message', (message) => {
+  socket.on('send-message', (message) => {
     const { roomCode, playerName } = socket.data;
     if (roomCode && playerName) {
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        io.to(roomCode).emit('new-message', {
-            sender: playerName,
-            message: message,
-            time: time
-        });
+      io.to(roomCode).emit('new-message', {
+        sender: playerName,
+        message: message,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
     }
-});
+  });
 
   // Отключение
   socket.on('disconnect', () => {
@@ -300,17 +283,3 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log(`🌐 WebSocket доступен на ws://0.0.0.0:${PORT}`);
 });
-// Обновите обработчик update-game:
-socket.on('update-game', (gameState) => {
-    const { roomCode, role } = socket.data;
-    if (!roomCode || role !== 'master') return;
-    
-    const room = rooms.get(roomCode);
-    if (room) {
-        room.state = gameState;
-        room.lastActivity = Date.now();
-        // Рассылаем обновление всем в комнате
-        io.to(roomCode).emit('game-updated', gameState);
-    }
-});
-
