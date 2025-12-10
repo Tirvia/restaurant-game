@@ -247,16 +247,18 @@ socket.on('roll-dice', () => {
   });
 
   // Сообщения в чат
-  socket.on('send-message', (message) => {
+// Сообщения в чат
+socket.on('send-message', (message) => {
     const { roomCode, playerName } = socket.data;
     if (roomCode && playerName) {
-      io.to(roomCode).emit('new-message', {
-        sender: playerName,
-        message: message,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        io.to(roomCode).emit('new-message', {
+            sender: playerName,
+            message: message,
+            time: time
+        });
     }
-  });
+});
 
   // Отключение
   socket.on('disconnect', () => {
@@ -298,3 +300,17 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log(`🌐 WebSocket доступен на ws://0.0.0.0:${PORT}`);
 });
+// Обновите обработчик update-game:
+socket.on('update-game', (gameState) => {
+    const { roomCode, role } = socket.data;
+    if (!roomCode || role !== 'master') return;
+    
+    const room = rooms.get(roomCode);
+    if (room) {
+        room.state = gameState;
+        room.lastActivity = Date.now();
+        // Рассылаем обновление всем в комнате
+        io.to(roomCode).emit('game-updated', gameState);
+    }
+});
+
