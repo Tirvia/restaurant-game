@@ -160,7 +160,8 @@ io.on('connection', (socket) => {
   });
 
   // Бросок кубика
-  socket.on('roll-dice', () => {
+ // В событии roll-dice замените текущий код на:
+socket.on('roll-dice', () => {
     const { roomCode, role } = socket.data;
     if (!roomCode) return;
     
@@ -170,28 +171,42 @@ io.on('connection', (socket) => {
     // Только текущий игрок может бросать
     const currentPlayer = room.state.currentPlayer;
     const canRoll = 
-      (role === 'player1' && currentPlayer === 1) ||
-      (role === 'player2' && currentPlayer === 2);
+        (role === 'player1' && currentPlayer === 1) ||
+        (role === 'player2' && currentPlayer === 2);
 
     if (!canRoll) {
-      socket.emit('error', { message: 'Сейчас не ваш ход' });
-      return;
+        socket.emit('error', { message: 'Сейчас не ваш ход' });
+        return;
     }
 
     const diceResult = Math.floor(Math.random() * 6) + 1;
+    
+    // Выбираем случайную карточку из соответствующей категории
+    const categories = {
+        1: ['Кухня', [/* вопросы для кухни */]],
+        2: ['Бар', [/* вопросы для бара */]],
+        3: ['Знания', [/* вопросы для знаний */]],
+        4: ['Ситуация', [/* вопросы для ситуации */]],
+        5: ['Сервис', [/* вопросы для сервиса */]],
+        6: ['Продажи', [/* вопросы для продаж */]]
+    };
+    
+    // Здесь должна быть ваша логика выбора карточки
+    // Для примера, просто отправляем категорию
     room.state.diceResult = diceResult;
+    room.state.currentCardCategory = diceResult;
     room.lastActivity = Date.now();
 
     // Отправляем результат всем в комнате
     io.to(roomCode).emit('dice-rolled', {
-      dice: diceResult,
-      player: currentPlayer,
-      playerName: currentPlayer === 1 ? room.player1?.name : room.player2?.name
+        dice: diceResult,
+        player: currentPlayer,
+        playerName: currentPlayer === 1 ? room.player1?.name : room.player2?.name,
+        cardCategory: diceResult
     });
 
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult}`);
-  });
-
+});
   // Игрок завершил ответ
   socket.on('answer-completed', () => {
     const { roomCode, role } = socket.data;
