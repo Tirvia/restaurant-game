@@ -16,7 +16,7 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
-// Раздаём статические файлы из папки public
+// Раздаём статические файлы
 app.use(express.static(path.join(__dirname, 'public')));
 
 // API для проверки здоровья
@@ -31,20 +31,6 @@ app.get('/health', (req, res) => {
 // Главная страница
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Для отладки: все маршруты
-app.get('/debug', (req, res) => {
-  res.json({
-    message: 'Сервер работает',
-    files: {
-      index: path.join(__dirname, 'public', 'index.html'),
-      styles: path.join(__dirname, 'public', 'styles.css'),
-      script: path.join(__dirname, 'public', 'script.js'),
-      cards: path.join(__dirname, 'public', 'cards.json')
-    },
-    timestamp: new Date().toISOString()
-  });
 });
 
 // Хранилище комнат
@@ -293,29 +279,7 @@ function generateRoomCode() {
 }
 
 const PORT = process.env.PORT || 3000;
-
-// Проверяем доступность файлов при запуске
-console.log('📁 Структура проекта:');
-console.log('├── server.js');
-console.log('├── package.json');
-console.log('├── railway.toml');
-console.log('└── public/');
-console.log('    ├── index.html');
-console.log('    ├── styles.css');
-console.log('    ├── script.js');
-console.log('    └── cards.json');
-
-// Проверяем существование файлов
-const fs = require('fs');
-try {
-  const files = fs.readdirSync(path.join(__dirname, 'public'));
-  console.log('✅ Файлы в папке public:', files);
-} catch (error) {
-  console.error('❌ Ошибка чтения папки public:', error.message);
-}
-
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log(`🌐 HTTP доступен на http://0.0.0.0:${PORT}`);
   console.log(`🌐 WebSocket доступен на ws://0.0.0.0:${PORT}`);
 });
