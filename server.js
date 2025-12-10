@@ -1,7 +1,10 @@
+[file name]: server.js
+[file content begin]
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -33,6 +36,27 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Загрузка вопросов
+let cardsData = {};
+try {
+  const cardsPath = path.join(__dirname, 'public', 'cards.json');
+  const rawData = fs.readFileSync(cardsPath, 'utf8');
+  cardsData = JSON.parse(rawData);
+  console.log('✅ Вопросы загружены из cards.json');
+} catch (error) {
+  console.error('❌ Ошибка загрузки вопросов:', error.message);
+  cardsData = {
+    categories: {
+      "1": [{ question: "Демо вопрос 1", instruction: "Инструкция 1" }],
+      "2": [{ question: "Демо вопрос 2", instruction: "Инструкция 2" }],
+      "3": [{ question: "Демо вопрос 3", instruction: "Инструкция 3" }],
+      "4": [{ question: "Демо вопрос 4", instruction: "Инструкция 4" }],
+      "5": [{ question: "Демо вопрос 5", instruction: "Инструкция 5" }],
+      "6": [{ question: "Демо вопрос 6", instruction: "Инструкция 6" }]
+    }
+  };
+}
+
 // Хранилище комнат
 const rooms = new Map();
 
@@ -51,7 +75,8 @@ io.on('connection', (socket) => {
         currentPlayer: 1,
         scores: { 1: 0, 2: 0 },
         positions: { 1: 0, 2: 0 },
-        diceResult: 0
+        diceResult: 0,
+        currentQuestion: null
       },
       lastActivity: Date.now()
     });
@@ -179,15 +204,41 @@ io.on('connection', (socket) => {
     }
 
     const diceResult = Math.floor(Math.random() * 6) + 1;
+    
+    // Выбираем случайный вопрос из категории
+    const category = diceResult.toString();
+    const questions = cardsData.categories[category];
+    let randomQuestion = null;
+    
+    if (questions && questions.length > 0) {
+      randomQuestion = questions[Math.floor(Math.random() * questions.length)];
+    } else {
+      randomQuestion = {
+        question: `Вопрос для категории ${diceResult}`,
+        instruction: "Ответьте на вопрос"
+      };
+    }
+    
+    // Добавляем dice к вопросу для отображения
+    randomQuestion.dice = diceResult;
+    
     room.state.diceResult = diceResult;
+    room.state.currentQuestion = randomQuestion;
     room.lastActivity = Date.now();
 
     // Отправляем результат всем в комнате
     io.to(roomCode).emit('dice-rolled', {
       dice: diceResult,
       player: currentPlayer,
-      playerName: currentPlayer === 1 ? room.player1?.name : room.player2?.name
+      playerName: currentPlayer === 1 ? room.player1?.name : room.player2?.name,
+      question: randomQuestion
     });
+
+    // Также отправляем отдельное событие с вопросом для синхронизации
+    io.to(roomCode).emit('question-updated', randomQuestion);
+    
+    // Обновляем состояние игры у всех
+    io.to(roomCode).emit('game-updated', room.state);
 
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult}`);
   });
@@ -203,13 +254,13 @@ io.on('connection', (socket) => {
   // Обновление состояния игры
   socket.on('update-game', (gameState) => {
     const { roomCode, role } = socket.data;
-    if (!roomCode || role !== 'master') return;
+    if (!roomCode || (role !== 'master' && role !== 'local')) return;
     
     const room = rooms.get(roomCode);
     if (room) {
-      room.state = gameState;
+      room.state = { ...room.state, ...gameState };
       room.lastActivity = Date.now();
-      socket.to(roomCode).emit('game-updated', gameState);
+      io.to(roomCode).emit('game-updated', room.state);
     }
   });
 
@@ -222,25 +273,34 @@ io.on('connection', (socket) => {
     if (room) {
       room.state.currentPlayer = room.state.currentPlayer === 1 ? 2 : 1;
       room.state.diceResult = 0;
+      room.state.currentQuestion = null;
       room.lastActivity = Date.now();
       
       io.to(roomCode).emit('turn-changed', {
         currentPlayer: room.state.currentPlayer,
         playerName: room.state.currentPlayer === 1 ? room.player1?.name : room.player2?.name
       });
+      
+      // Обновляем состояние игры у всех
+      io.to(roomCode).emit('game-updated', room.state);
     }
   });
 
   // Сообщения в чат
-  socket.on('send-message', (message) => {
+  socket.on('send-message', (data) => {
     const { roomCode, playerName } = socket.data;
     if (roomCode && playerName) {
       io.to(roomCode).emit('new-message', {
         sender: playerName,
-        message: message,
+        message: data.message || data,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     }
+  });
+
+  // Ping для поддержания соединения
+  socket.on('ping', () => {
+    socket.emit('pong', { timestamp: Date.now() });
   });
 
   // Отключение
@@ -283,3 +343,4 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log(`🌐 WebSocket доступен на ws://0.0.0.0:${PORT}`);
 });
+[file content end]
