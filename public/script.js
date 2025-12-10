@@ -1,5 +1,4 @@
-[file name]: script.js
-[file content begin]
+
 // Инициализация игры
 class Game {
     constructor() {
@@ -1742,4 +1741,4 @@ class Game {
 document.addEventListener('DOMContentLoaded', () => {
     window.game = new Game();
 });
-[file content end]
+
