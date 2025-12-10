@@ -1,5 +1,4 @@
-[file name]: server.js
-[file content begin]
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -343,4 +342,3 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
   console.log(`🌐 WebSocket доступен на ws://0.0.0.0:${PORT}`);
 });
-[file content end]
