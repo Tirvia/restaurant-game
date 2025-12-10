@@ -6,7 +6,7 @@
     <title>Игра - GARAGE</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Socket.io -->
+    <!-- ВАЖНО: Добавьте Socket.io перед вашим script.js -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
@@ -138,15 +138,6 @@
                                 <button class="point-btn minus-btn" data-points="-3" data-team="1">-3</button>
                             </div>
                         </div>
-                        <div class="zero-points">
-                            <h5 style="color: #FFC107;">Без очков:</h5>
-                            <div class="points-buttons">
-                                <button class="point-btn zero-btn" data-points="0" data-team="1" 
-                                        style="background: #FFC107; color: black; width: 50px; height: 50px;">
-                                    0
-                                </button>
-                            </div>
-                        </div>
                     </div>
                     <div class="current-selection" id="team1-selection">
                         Выбрано: <span>0 очков</span>
@@ -171,15 +162,6 @@
                                 <button class="point-btn minus-btn" data-points="-3" data-team="2">-3</button>
                             </div>
                         </div>
-                        <div class="zero-points">
-                            <h5 style="color: #FFC107;">Без очков:</h5>
-                            <div class="points-buttons">
-                                <button class="point-btn zero-btn" data-points="0" data-team="2" 
-                                        style="background: #FFC107; color: black; width: 50px; height: 50px;">
-                                    0
-                                </button>
-                            </div>
-                        </div>
                     </div>
                     <div class="current-selection" id="team2-selection">
                         Выбрано: <span>0 очков</span>
@@ -192,554 +174,189 @@
             </div>
         </div>
 
-        <!-- Чат игры (только для онлайн-режима) -->
-        <div id="chat-container" class="chat-container" style="display: none;">
-            <div class="chat-header">
-                <h4><i class="fas fa-comments"></i> Чат игры</h4>
-                <button id="toggle-chat" class="chat-toggle">
-                    <i class="fas fa-chevron-up"></i>
-                </button>
-            </div>
-            <div class="chat-messages" id="chat-messages">
-                <div class="chat-system-message">
-                    <i class="fas fa-info-circle"></i> Чат подключен
-                </div>
-            </div>
-            <div class="chat-input">
-                <input type="text" id="chat-input" placeholder="Введите сообщение..." maxlength="200">
-                <button id="send-message-btn" class="send-btn">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </div>
-        </div>
-
         <!-- Салюты при победе -->
         <div id="fireworks"></div>
     </div>
 
-    <!-- Кнопка для администратора (только для локального использования) -->
-    <div id="admin-panel" style="position: fixed; bottom: 10px; left: 10px; z-index: 1000; display: none;">
-        <button id="edit-questions" class="btn" style="background: #9C27B0;">
-            <i class="fas fa-edit"></i> Редактировать вопросы
-        </button>
-    </div>
+    <script src="script.js"></script>
+<!-- Кнопка для администратора (только для локального использования) -->
+<div id="admin-panel" style="position: fixed; bottom: 10px; left: 10px; z-index: 1000; display: none;">
+    <button id="edit-questions" class="btn" style="background: #9C27B0;">
+        <i class="fas fa-edit"></i> Редактировать вопросы
+    </button>
+</div>
 
-    <!-- Модальное окно редактирования вопросов -->
-    <div id="edit-questions-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h3><i class="fas fa-edit"></i> Редактирование вопросов</h3>
-            <div id="questions-editor"></div>
-            <div style="margin-top: 20px;">
-                <button id="save-questions" class="btn" style="background: #4CAF50;">Сохранить</button>
-                <button id="cancel-edit" class="btn" style="background: #666;">Отмена</button>
-            </div>
+<!-- Модальное окно редактирования вопросов -->
+<div id="edit-questions-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3><i class="fas fa-edit"></i> Редактирование вопросов</h3>
+        <div id="questions-editor"></div>
+        <div style="margin-top: 20px;">
+            <button id="save-questions" class="btn" style="background: #4CAF50;">Сохранить</button>
+            <button id="cancel-edit" class="btn" style="background: #666;">Отмена</button>
         </div>
     </div>
+</div>
 
-    <script src="script.js"></script>
-
-    <script>
-    // Код для редактирования вопросов
-    document.addEventListener('DOMContentLoaded', function() {
-        const editBtn = document.getElementById('edit-questions');
-        const modal = document.getElementById('edit-questions-modal');
+<script>
+// Код для редактирования вопросов
+document.addEventListener('DOMContentLoaded', function() {
+    const editBtn = document.getElementById('edit-questions');
+    const modal = document.getElementById('edit-questions-modal');
+    
+    if (editBtn && modal) {
+        editBtn.addEventListener('click', function() {
+            modal.style.display = 'block';
+            loadQuestionsForEditing();
+        });
         
-        if (editBtn && modal) {
-            editBtn.addEventListener('click', function() {
-                modal.style.display = 'block';
-                loadQuestionsForEditing();
-            });
-            
-            document.getElementById('cancel-edit')?.addEventListener('click', function() {
-                modal.style.display = 'none';
-            });
-            
-            document.getElementById('save-questions')?.addEventListener('click', function() {
-                saveQuestions();
-                modal.style.display = 'none';
-                alert('Вопросы сохранены! Обновите страницу для применения изменений.');
-            });
-        }
-        
-        function loadQuestionsForEditing() {
-            // Загрузка и отображение вопросов для редактирования
-            fetch('cards.json')
-                .then(response => response.json())
-                .then(data => {
-                    const editor = document.getElementById('questions-editor');
-                    let html = '<div class="categories-editor">';
-                    
-                    for (let category = 1; category <= 6; category++) {
-                        const questions = data.categories[category] || [];
-                        html += `
-                            <div class="category-editor">
-                                <h4>Категория ${category}: ${getCategoryName(category)}</h4>
-                                <div class="questions-list" id="questions-${category}">
-                        `;
-                        
-                        questions.forEach((q, index) => {
-                            html += `
-                                <div class="question-item">
-                                    <input type="text" class="question-input" 
-                                           value="${q.question.replace(/"/g, '&quot;')}" 
-                                           data-cat="${category}" data-index="${index}"
-                                           placeholder="Вопрос" style="width: 100%; margin-bottom: 5px;">
-                                    <input type="text" class="instruction-input"
-                                           value="${(q.instruction || '').replace(/"/g, '&quot;')}"
-                                           data-cat="${category}" data-index="${index}"
-                                           placeholder="Инструкция для ответа" style="width: 100%; margin-bottom: 5px;">
-                                    <button class="btn delete-question" style="background: #f44336; margin-top: 5px;">Удалить</button>
-                                </div>
-                            `;
-                        });
-                        
-                        html += `
-                                </div>
-                                <button class="btn add-question" data-category="${category}" 
-                                        style="background: #2196F3; margin-top: 10px;">
-                                    <i class="fas fa-plus"></i> Добавить вопрос
-                                </button>
-                            </div>
-                        `;
-                    }
-                    
-                    // Добавляем зоны
+        document.getElementById('cancel-edit')?.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+    }
+    
+    function loadQuestionsForEditing() {
+        // Загрузка и отображение вопросов для редактирования
+        fetch('cards.json')
+            .then(response => response.json())
+            .then(data => {
+                const editor = document.getElementById('questions-editor');
+                let html = '<div class="categories-editor">';
+                
+                for (let category = 1; category <= 6; category++) {
+                    const questions = data.categories[category] || [];
                     html += `
                         <div class="category-editor">
-                            <h4>Специальные зоны</h4>
-                            <div class="zone-questions">
-                                <div class="question-item">
-                                    <label>Зона граммовки:</label>
-                                    <input type="text" id="zone-grams" value="${data.zones?.grams || ''}" 
-                                           placeholder="Вопрос для зоны граммовки" style="width: 100%; margin-bottom: 5px;">
-                                </div>
-                                <div class="question-item">
-                                    <label>Зона описания:</label>
-                                    <input type="text" id="zone-description" value="${data.zones?.description || ''}" 
-                                           placeholder="Вопрос для зоны описания" style="width: 100%; margin-bottom: 5px;">
-                                </div>
-                                <div class="question-item">
-                                    <label>Зона аллергии:</label>
-                                    <input type="text" id="zone-allergy" value="${data.zones?.allergy || ''}" 
-                                           placeholder="Вопрос для зоны аллергии" style="width: 100%; margin-bottom: 5px;">
-                                </div>
-                            </div>
-                        </div>
+                            <h4>Категория ${category}: ${getCategoryName(category)}</h4>
+                            <div class="questions-list" id="questions-${category}">
                     `;
                     
-                    html += '</div>';
-                    editor.innerHTML = html;
-                    
-                    // Обработчики для кнопок
-                    document.querySelectorAll('.add-question').forEach(btn => {
-                        btn.addEventListener('click', function() {
-                            const category = this.dataset.category;
-                            addNewQuestion(category);
-                        });
+                    questions.forEach((q, index) => {
+                        html += `
+                            <div class="question-item">
+                                <input type="text" class="question-input" 
+                                       value="${q.question}" 
+                                       data-cat="${category}" data-index="${index}"
+                                       placeholder="Вопрос">
+                                <input type="text" class="instruction-input"
+                                       value="${q.instruction || ''}"
+                                       data-cat="${category}" data-index="${index}"
+                                       placeholder="Инструкция">
+                                <button class="btn delete-question" style="background: #f44336;">Удалить</button>
+                            </div>
+                        `;
                     });
                     
-                    document.querySelectorAll('.delete-question').forEach(btn => {
-                        btn.addEventListener('click', function() {
-                            this.closest('.question-item').remove();
-                        });
+                    html += `
+                            </div>
+                            <button class="btn add-question" data-category="${category}" 
+                                    style="background: #2196F3; margin-top: 10px;">
+                                <i class="fas fa-plus"></i> Добавить вопрос
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+                editor.innerHTML = html;
+                
+                // Обработчики для кнопок
+                document.querySelectorAll('.add-question').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const category = this.dataset.category;
+                        addNewQuestion(category);
                     });
-                })
-                .catch(error => {
-                    console.error('Ошибка загрузки вопросов:', error);
-                    document.getElementById('questions-editor').innerHTML = 
-                        '<p style="color: red;">Ошибка загрузки вопросов. Проверьте файл cards.json</p>';
                 });
-        }
-        
-        function addNewQuestion(category) {
-            const questionsList = document.getElementById(`questions-${category}`);
-            const newIndex = questionsList.children.length;
-            
-            const questionDiv = document.createElement('div');
-            questionDiv.className = 'question-item';
-            questionDiv.innerHTML = `
-                <input type="text" class="question-input" 
-                       data-cat="${category}" data-index="${newIndex}"
-                       placeholder="Новый вопрос" style="width: 100%; margin-bottom: 5px;">
-                <input type="text" class="instruction-input"
-                       data-cat="${category}" data-index="${newIndex}"
-                       placeholder="Инструкция для ответа" style="width: 100%; margin-bottom: 5px;">
-                <button class="btn delete-question" style="background: #f44336; margin-top: 5px;">Удалить</button>
-            `;
-            
-            questionsList.appendChild(questionDiv);
-            
-            questionDiv.querySelector('.delete-question').addEventListener('click', function() {
-                questionDiv.remove();
+                
+                document.querySelectorAll('.delete-question').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        this.closest('.question-item').remove();
+                    });
+                });
             });
-        }
+    }
+    
+    function addNewQuestion(category) {
+        const questionsList = document.getElementById(`questions-${category}`);
+        const newIndex = questionsList.children.length;
         
-        function saveQuestions() {
-            const data = {
-                categories: {},
-                zones: {}
-            };
-            
-            // Сохраняем вопросы категорий
-            for (let category = 1; category <= 6; category++) {
-                const questions = [];
-                const questionItems = document.querySelectorAll(`#questions-${category} .question-item`);
-                
-                questionItems.forEach(item => {
-                    const question = item.querySelector('.question-input').value;
-                    const instruction = item.querySelector('.instruction-input').value;
-                    if (question.trim()) {
-                        questions.push({
-                            question: question,
-                            instruction: instruction
-                        });
-                    }
-                });
-                
-                data.categories[category] = questions;
-            }
-            
-            // Сохраняем вопросы зон
-            data.zones = {
-                grams: document.getElementById('zone-grams').value,
-                description: document.getElementById('zone-description').value,
-                allergy: document.getElementById('zone-allergy').value
-            };
-            
-            // Сохраняем в localStorage (или отправляем на сервер)
-            localStorage.setItem('game_questions', JSON.stringify(data));
-            
-            // Для демо-версии показываем данные в консоли
-            console.log('Сохраненные вопросы:', data);
-            
-            // В реальном приложении здесь должен быть запрос к серверу
-            alert('Вопросы сохранены в localStorage. В реальной игре они должны сохраняться на сервере.');
-        }
+        const questionDiv = document.createElement('div');
+        questionDiv.className = 'question-item';
+        questionDiv.innerHTML = `
+            <input type="text" class="question-input" 
+                   data-cat="${category}" data-index="${newIndex}"
+                   placeholder="Новый вопрос">
+            <input type="text" class="instruction-input"
+                   data-cat="${category}" data-index="${newIndex}"
+                   placeholder="Инструкция для ответа">
+            <button class="btn delete-question" style="background: #f44336;">Удалить</button>
+        `;
         
-        function getCategoryName(num) {
-            const names = {
-                1: 'Кухня', 2: 'Бар', 3: 'Знания',
-                4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
-            };
-            return names[num] || 'Неизвестная';
-        }
+        questionsList.appendChild(questionDiv);
         
-        // Показываем кнопку админа только на локальной машине
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-            document.getElementById('admin-panel').style.display = 'block';
-        }
-    });
-    </script>
-
-    <style>
-    /* Дополнительные стили для модальных окон */
-    .modal {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.8);
-        z-index: 10000;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-
-    .modal-content {
-        background: white;
-        padding: 30px;
-        border-radius: 15px;
-        max-width: 800px;
-        max-height: 80vh;
-        overflow-y: auto;
-        color: #333;
-    }
-
-    .categories-editor {
-        display: grid;
-        gap: 20px;
-    }
-
-    .category-editor {
-        background: #f5f5f5;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #ddd;
-    }
-
-    .question-item {
-        background: white;
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
-        border: 1px solid #eee;
-    }
-
-    .question-input, .instruction-input {
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        font-size: 14px;
-    }
-
-    .zone-questions .question-item {
-        display: flex;
-        flex-direction: column;
+        questionDiv.querySelector('.delete-question').addEventListener('click', function() {
+            questionDiv.remove();
+        });
     }
     
-    .zone-questions label {
-        font-weight: bold;
-        margin-bottom: 5px;
-        color: #333;
+    function getCategoryName(num) {
+        const names = {
+            1: 'Кухня', 2: 'Бар', 3: 'Знания',
+            4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+        };
+        return names[num] || 'Неизвестная';
     }
-    
-    /* Стили для чата */
-    .chat-container {
-        position: fixed;
-        right: 20px;
-        bottom: 20px;
-        width: 300px;
-        height: 400px;
-        background: #2a2a2a;
-        border-radius: 10px;
-        border: 2px solid #444;
-        z-index: 1000;
-        display: flex;
-        flex-direction: column;
-    }
+});
+</script>
 
-    .chat-header {
-        background: #333;
-        padding: 10px 15px;
-        border-radius: 10px 10px 0 0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid #444;
-    }
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.8);
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
 
-    .chat-header h4 {
-        margin: 0;
-        color: white;
-        font-size: 14px;
-    }
+.modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 15px;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    color: #333;
+}
 
-    .chat-toggle {
-        background: none;
-        border: none;
-        color: white;
-        cursor: pointer;
-        font-size: 14px;
-        padding: 5px;
-    }
+.categories-editor {
+    display: grid;
+    gap: 20px;
+}
 
-    .chat-messages {
-        flex: 1;
-        overflow-y: auto;
-        padding: 10px;
-        background: #1a1a1a;
-    }
+.category-editor {
+    background: #f5f5f5;
+    padding: 15px;
+    border-radius: 10px;
+}
 
-    .chat-message {
-        background: #333;
-        padding: 8px 12px;
-        margin: 5px 0;
-        border-radius: 8px;
-        border-left: 3px solid #4CAF50;
-        font-size: 12px;
-    }
+.question-item {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
 
-    .chat-message.own-message {
-        background: #2c5282;
-        border-left-color: #63b3ed;
-    }
-
-    .message-header {
-        display: flex;
-        justify-content: space-between;
-        font-size: 11px;
-        color: #aaa;
-        margin-bottom: 5px;
-    }
-
-    .message-sender {
-        font-weight: bold;
-    }
-
-    .message-time {
-        opacity: 0.7;
-    }
-
-    .message-text {
-        color: white;
-        word-wrap: break-word;
-    }
-
-    .chat-input {
-        display: flex;
-        padding: 10px;
-        background: #333;
-        border-radius: 0 0 10px 10px;
-        border-top: 1px solid #444;
-    }
-
-    .chat-input input {
-        flex: 1;
-        padding: 8px;
-        border: 1px solid #444;
-        border-radius: 5px;
-        background: #1a1a1a;
-        color: white;
-        font-size: 12px;
-    }
-
-    .send-btn {
-        background: #4CAF50;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        padding: 8px 15px;
-        margin-left: 10px;
-        cursor: pointer;
-        font-size: 14px;
-    }
-
-    .chat-system-message {
-        text-align: center;
-        color: #aaa;
-        font-size: 11px;
-        margin: 10px 0;
-        font-style: italic;
-    }
-    
-    /* Стили для зон на игровом поле */
-    .zone-legend {
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        background: rgba(0,0,0,0.7);
-        padding: 10px;
-        border-radius: 5px;
-        z-index: 10;
-    }
-    
-    .zone-legend-item {
-        display: flex;
-        align-items: center;
-        margin: 5px 0;
-        font-size: 12px;
-        color: white;
-    }
-    
-    .zone-color {
-        width: 15px;
-        height: 15px;
-        border-radius: 3px;
-        margin-right: 8px;
-    }
-    
-    /* Уведомления */
-    .notification {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: #4CAF50;
-        color: white;
-        padding: 15px 25px;
-        border-radius: 10px;
-        z-index: 10000;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-        animation: slideIn 0.3s ease-out;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        max-width: 300px;
-    }
-
-    .notification.error {
-        background: #f44336;
-    }
-
-    .notification.warning {
-        background: #FF9800;
-    }
-
-    .notification.info {
-        background: #2196F3;
-    }
-
-    @keyframes slideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-
-    @keyframes slideOut {
-        from { transform: translateX(0); opacity: 1; }
-        to { transform: translateX(100%); opacity: 0; }
-    }
-    
-    /* Адаптивность */
-    @media (max-width: 768px) {
-        .chat-container {
-            width: 250px;
-            height: 350px;
-            right: 10px;
-            bottom: 10px;
-        }
-        
-        .modal-content {
-            width: 90%;
-            padding: 15px;
-        }
-        
-        .video-container {
-            flex-direction: column;
-        }
-        
-        .video-box {
-            width: 100%;
-            height: 150px;
-        }
-    }
-    
-    /* Анимации для кубика */
-    @keyframes diceRoll {
-        0% { transform: rotate(0deg) scale(1); }
-        25% { transform: rotate(90deg) scale(1.2); }
-        50% { transform: rotate(180deg) scale(1); }
-        75% { transform: rotate(270deg) scale(1.2); }
-        100% { transform: rotate(360deg) scale(1); }
-    }
-
-    .dice.rolling {
-        animation: diceRoll 0.5s ease-in-out 3;
-    }
-    
-    /* Улучшенные стили для клеток */
-    .cell {
-        box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
-        transition: all 0.3s ease;
-    }
-    
-    .cell:hover {
-        transform: scale(1.2);
-        z-index: 100;
-        box-shadow: 0 0 20px rgba(255, 255, 255, 0.7);
-    }
-    
-    .cell.start, .cell.finish {
-        animation: pulse 2s infinite alternate;
-    }
-    
-    @keyframes pulse {
-        from {
-            box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-        }
-        to {
-            box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
-        }
-    }
-    </style>
+.question-input, .instruction-input {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+</style>
 </body>
 </html>
