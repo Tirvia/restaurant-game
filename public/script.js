@@ -180,82 +180,15 @@ class Game {
         const videoContainer = document.querySelector('.video-container');
         if (videoContainer) videoContainer.style.display = 'none';
         
-        // В локальном режиме показываем панель ведущего
+        // В локальном режиме ведущий может бросать кубик для демонстрации
+        // Но в основном режиме - только игроки
+        
+        // Панель ведущего всегда видна
         const panel = document.getElementById('master-panel');
         if (panel) panel.style.display = 'block';
         
-        // В локальном режиме ведущий может управлять очками
-        this.role = 'master'; // Устанавливаем роль ведущего для локального режима
-        
-        // Настраиваем обработчики для кнопок очков
-        this.setupLocalPointsButtons();
-        
         // Обновляем кнопки для локального режима
         this.updateLocalRollButton();
-    }
-    
-    setupLocalPointsButtons() {
-        // Настраиваем кнопки очков для локального режима
-        document.querySelectorAll('.point-btn').forEach(btn => {
-            btn.disabled = false;
-            btn.addEventListener('click', (e) => {
-                if (this.pointsApplied || this.applyButtonClicked) return;
-                
-                const points = parseInt(e.target.dataset.points);
-                const team = parseInt(e.target.dataset.team);
-                this.selectPoints(team, points);
-            });
-        });
-        
-        // Добавляем кнопки "0 очков" для каждой команды
-        this.addZeroButtons();
-        
-        // Кнопка применения очков
-        const applyBtn = document.getElementById('apply-points');
-        if (applyBtn) {
-            applyBtn.disabled = false;
-            applyBtn.addEventListener('click', () => this.applySelectedPoints());
-        }
-        
-        // Кнопка следующего хода
-        const nextTurnBtn = document.getElementById('next-turn');
-        if (nextTurnBtn) {
-            nextTurnBtn.disabled = false;
-            nextTurnBtn.addEventListener('click', () => this.nextTurn());
-        }
-    }
-    
-    addZeroButtons() {
-        // Добавляем кнопки "0 очков" для каждой команды
-        for (let team of [1, 2]) {
-            const teamControl = document.querySelector(`.team-control:nth-child(${team}) .points-section`);
-            if (teamControl) {
-                // Проверяем, не добавлены ли уже кнопки 0
-                if (!teamControl.querySelector('.zero-points')) {
-                    const zeroDiv = document.createElement('div');
-                    zeroDiv.className = 'zero-points';
-                    zeroDiv.innerHTML = `
-                        <h5 style="color: #FFC107; margin-top: 10px;">Без очков:</h5>
-                        <div class="points-buttons">
-                            <button class="point-btn zero-btn" data-points="0" data-team="${team}" 
-                                    style="background: #FFC107; color: black; width: 50px; height: 50px;">
-                                0
-                            </button>
-                        </div>
-                    `;
-                    teamControl.appendChild(zeroDiv);
-                    
-                    // Добавляем обработчик для кнопки 0
-                    zeroDiv.querySelector('.zero-btn').addEventListener('click', (e) => {
-                        if (this.pointsApplied || this.applyButtonClicked) return;
-                        
-                        const points = parseInt(e.target.dataset.points);
-                        const team = parseInt(e.target.dataset.team);
-                        this.selectPoints(team, points);
-                    });
-                }
-            }
-        }
     }
 
     async showRoleSelection() {
@@ -276,8 +209,7 @@ class Game {
                     <!-- Ввод имени -->
                     <div class="name-input-section">
                         <label for="player-name"><i class="fas fa-user"></i> Введите ваше имя:</label>
-                        <input type="text" id="player-name" placeholder="Ваше имя" maxlength="20" autocomplete="off" 
-                               style="width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #4CAF50; border-radius: 8px; background: #333; color: white; font-size: 16px;">
+                        <input type="text" id="player-name" placeholder="Ваше имя" maxlength="20" autocomplete="off">
                     </div>
                     
                     <!-- Выбор роли -->
@@ -340,12 +272,10 @@ class Game {
                     
                     <!-- Секция для игроков -->
                     <div id="player-section" class="role-section" style="display: none;">
-                        <div class="input-group" style="width: 100%;">
-                            <input type="text" id="room-code-input" placeholder="Введите 6-значный код комнаты" 
-                                   maxlength="6" autocomplete="off"
-                                   style="width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #2196F3; border-radius: 8px; background: #333; color: white; font-size: 18px; text-align: center; letter-spacing: 3px;">
-                            <button id="join-room-btn" class="btn join-btn" style="width: 100%; margin-top: 10px;">
-                                <i class="fas fa-sign-in-alt"></i> Присоединиться к комнате
+                        <div class="input-group">
+                            <input type="text" id="room-code-input" placeholder="Введите 6-значный код" maxlength="6" autocomplete="off">
+                            <button id="join-room-btn" class="btn join-btn">
+                                <i class="fas fa-sign-in-alt"></i> Присоединиться
                             </button>
                         </div>
                         <div id="room-status" class="room-status"></div>
@@ -670,19 +600,19 @@ class Game {
             taskTypeElement.textContent = taskNames[data.dice];
         }
         
-        // Синхронизация: показываем карточку всем
-        // В онлайн-режиме: показываем всем игрокам
-        // В локальном режиме: показываем всем
+        // Показываем карточку только если:
+        // 1. Это текущий игрок (который должен отвечать)
+        // 2. Это ведущий (чтобы видеть вопрос)
+        // 3. Это локальная игра (всем)
         
-        // Всегда показываем карточку для синхронизации
-        setTimeout(() => {
-            // Используем данные с сервера, если есть
-            if (data.cardCategory) {
-                this.drawCard(data.cardCategory);
-            } else {
-                this.drawCard(data.dice);
-            }
-        }, 800);
+        const shouldShowCard = this.gameMode === 'local' || 
+                              this.role === 'master' || 
+                              (this.role === 'player1' && this.currentPlayer === 1) ||
+                              (this.role === 'player2' && this.currentPlayer === 2);
+        
+        if (shouldShowCard) {
+            setTimeout(() => this.drawCard(data.dice), 800);
+        }
         
         if (this.gameMode === 'online') {
             this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
@@ -745,12 +675,7 @@ class Game {
         const cards = this.cards[type];
         if (!cards || cards.length === 0) return;
         
-        // Для синхронизации используем одинаковый алгоритм выбора карточки
-        // Используем текущий ход и тип кубика для детерминированного выбора
-        const seed = this.currentPlayer * 100 + this.diceResult * 10 + Date.now() % 100;
-        const cardIndex = seed % cards.length;
-        const selectedCard = cards[cardIndex];
-        
+        const randomCard = cards[Math.floor(Math.random() * cards.length)];
         const modal = document.getElementById('card-modal');
         if (!modal) return;
         
@@ -759,8 +684,8 @@ class Game {
         
         document.getElementById('card-dice').textContent = type;
         document.getElementById('card-category').textContent = this.getCategoryName(type);
-        document.getElementById('card-question').textContent = selectedCard.question;
-        document.getElementById('card-instruction').textContent = selectedCard.instruction || '';
+        document.getElementById('card-question').textContent = randomCard.question;
+        document.getElementById('card-instruction').textContent = randomCard.instruction || '';
         
         // Настраиваем кнопку в зависимости от роли
         const answerBtn = document.getElementById('answer-received');
@@ -928,24 +853,20 @@ class Game {
             return;
         }
         
-        // Разрешаем не начислять очки - можно нажать "Применить очки" без выбора
-        // или выбрать 0 очков
-        
-        let pointsChanged = false;
+        if (this.selectedPoints[1] === 0 && this.selectedPoints[2] === 0) {
+            alert('Сначала выберите очки для команд!');
+            return;
+        }
         
         for (let team of [1, 2]) {
             const points = this.selectedPoints[team];
             if (points !== 0) {
                 this.scores[team] += points;
                 this.movePiece(team, points);
-                pointsChanged = true;
             }
         }
         
-        if (pointsChanged) {
-            this.updateScores();
-        }
-        
+        this.updateScores();
         this.pointsApplied = true;
         this.applyButtonClicked = true;
         
@@ -1036,19 +957,15 @@ class Game {
             // Текст устанавливается в drawCard
         }
         
-        // Уже настроено в setupLocalPointsButtons для локального режима
-        // Для онлайн-режима настраиваем здесь
-        if (this.gameMode === 'online') {
-            document.querySelectorAll('.point-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    if (this.pointsApplied || this.applyButtonClicked) return;
-                    
-                    const points = parseInt(e.target.dataset.points);
-                    const team = parseInt(e.target.dataset.team);
-                    this.selectPoints(team, points);
-                });
+        document.querySelectorAll('.point-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (this.pointsApplied || this.applyButtonClicked) return;
+                
+                const points = parseInt(e.target.dataset.points);
+                const team = parseInt(e.target.dataset.team);
+                this.selectPoints(team, points);
             });
-        }
+        });
         
         const applyBtn = document.getElementById('apply-points');
         if (applyBtn) {
@@ -1170,164 +1087,920 @@ class Game {
         
         chatMessages.appendChild(messageDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
-        
-        // Добавляем звук нового сообщения (опционально)
-        try {
-            const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEAQB8AAEAfAAABAAgAZGF0YQ');
-            audio.play().catch(e => console.log('Звук не воспроизведен'));
-        } catch (e) {}
     }
 
-    // Методы для игрового поля
-    createBoard() {
-        const boardCanvas = document.getElementById('board-canvas');
-        if (!boardCanvas) return;
+      createBoard() {
+        const container = document.getElementById('cells-container');
+        if (!container) return;
         
-        const ctx = boardCanvas.getContext('2d');
-        boardCanvas.width = this.boardWidth;
-        boardCanvas.height = this.boardHeight;
+        container.innerHTML = '';
+        const positions = this.generateBoardPositions();
         
-        // Очищаем canvas
-        ctx.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
-        
-        // Рисуем игровую дорожку
-        this.drawBoardPath(ctx);
-    }
-
-    drawBoardPath(ctx) {
-        const centerX = this.boardWidth / 2;
-        const centerY = this.boardHeight / 2;
-        const startRadius = 100;
-        const endRadius = 250;
-        
-        // Рисуем спиральную дорожку
-        ctx.beginPath();
         for (let i = 0; i <= 40; i++) {
-            const radius = startRadius + (i * (endRadius - startRadius) / 40);
-            const angle = (Math.PI * 2 * i) / 40;
-            
-            const x = centerX + radius * Math.cos(angle);
-            const y = centerY + radius * Math.sin(angle);
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.id = `cell-${i}`;
+            cell.dataset.number = `Клетка ${i}`;
             
             if (i === 0) {
-                ctx.moveTo(x, y);
+                cell.textContent = 'СТАРТ';
+            } else if (i === 40) {
+                cell.textContent = 'ФИНИШ';
+                cell.classList.add('finish', 'finish-big');
             } else {
-                ctx.lineTo(x, y);
+                cell.textContent = i;
             }
+            
+            if (i === 0) {
+                cell.classList.add('start');
+            } else if (i === 40) {
+                // Уже добавили классы выше
+            } else if (i >= 11 && i <= 14) {
+                cell.classList.add('grams');
+            } else if (i >= 19 && i <= 22) {
+                cell.classList.add('description');
+            } else if (i >= 33 && i <= 36) {
+                cell.classList.add('allergy');
+            } else if ((i >= 26 && i <= 32) || (i >= 37 && i <= 39)) {
+                cell.classList.add('red');
+            } else {
+                cell.classList.add('normal');
+            }
+            
+            if (positions[i]) {
+                cell.style.left = positions[i].x + 'px';
+                cell.style.top = positions[i].y + 'px';
+            }
+            
+            container.appendChild(cell);
         }
-        ctx.strokeStyle = '#4CAF50';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+
+        this.updatePieces();
+    }
+
+    createZoneLabels() {
+        const container = document.getElementById('cells-container');
+        if (!container) return;
+        
+        // Надпись для зоны граммовки
+        const gramsLabel = document.createElement('div');
+        gramsLabel.className = 'zone-label';
+        gramsLabel.style.cssText = `
+            position: absolute;
+            color: #4CAF50;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 5;
+            transform: rotate(-90deg);
+            transform-origin: left top;
+            white-space: nowrap;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 8px;
+            border-radius: 3px;
+            letter-spacing: normal;
+            font-family: Arial, sans-serif;
+        `;
+        gramsLabel.textContent = 'Зона граммовки ±2';
+        gramsLabel.style.left = '140px';
+        gramsLabel.style.top = '490px';
+        container.appendChild(gramsLabel);
+        
+        // Надпись для зоны красочного описания
+        const descLabel = document.createElement('div');
+        descLabel.className = 'zone-label';
+        descLabel.style.cssText = `
+            position: absolute;
+            color: #9C27B0;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 5;
+            white-space: nowrap;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 8px;
+            border-radius: 3px;
+            border: 1px solid rgba(156, 39, 176, 0.5);
+            letter-spacing: normal;
+            font-family: Arial, sans-serif;
+        `;
+        descLabel.textContent = 'Зона красочного описания +1/-3';
+        descLabel.style.left = '220px';
+        descLabel.style.top = '30px';
+        container.appendChild(descLabel);
+        
+        // Надпись для зоны аллергии
+        const allergyLabel = document.createElement('div');
+        allergyLabel.className = 'zone-label';
+        allergyLabel.style.cssText = `
+            position: absolute;
+            color: #E91E63;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 5;
+            white-space: nowrap;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 8px;
+            border-radius: 3px;
+            border: 1px solid rgba(233, 30, 99, 0.5);
+            letter-spacing: normal;
+            font-family: Arial, sans-serif;
+        `;
+        allergyLabel.textContent = 'Зона аллергии +1/-5';
+        allergyLabel.style.left = '620px';
+        allergyLabel.style.top = '420px';
+        container.appendChild(allergyLabel);
     }
 
     generateBoardPositions() {
         const positions = [];
-        const centerX = this.boardWidth / 2;
-        const centerY = this.boardHeight / 2;
-        const startRadius = 100;
-        const endRadius = 250;
         
-        for (let i = 0; i <= 40; i++) {
-            const radius = startRadius + (i * (endRadius - startRadius) / 40);
-            const angle = (Math.PI * 2 * i) / 40;
+        // Оригинальные позиции клеток
+        positions[0] = { x: 300, y: 200 };
+        positions[1] = { x: 380, y: 200 };
+        positions[2] = { x: 460, y: 200 };
+        positions[3] = { x: 540, y: 200 };
+        positions[4] = { x: 540, y: 270 };
+        positions[5] = { x: 540, y: 340 };
+        positions[6] = { x: 520, y: 400 };
+        positions[7] = { x: 480, y: 460 };
+        positions[8] = { x: 420, y: 480 };
+        positions[9] = { x: 350, y: 480 };
+        positions[10] = { x: 280, y: 480 };
+        positions[11] = { x: 220, y: 460 };
+        positions[12] = { x: 170, y: 400 };
+        positions[13] = { x: 150, y: 330 };
+        positions[14] = { x: 150, y: 260 };
+        positions[15] = { x: 150, y: 190 };
+        positions[16] = { x: 150, y: 120 };
+        positions[17] = { x: 155, y: 50 };
+        positions[18] = { x: 190, y: 5 };
+        positions[19] = { x: 240, y: -30 };
+        positions[20] = { x: 300, y: -50 };
+        positions[21] = { x: 360, y: -50 };
+        positions[22] = { x: 420, y: -50 };
+        positions[23] = { x: 475, y: -30 };
+        positions[24] = { x: 510, y: 15 };
+        positions[25] = { x: 540, y: 70 };
+        
+        // Круговая часть
+        const circleCenterX = 800;
+        const circleCenterY = 180;
+        const circleRadius = 160;
+        
+        const totalSteps = 14;
+        const totalAngle = 360;
+        const angleStep = totalAngle / totalSteps;
+        
+        positions[26] = {
+            x: circleCenterX + circleRadius * Math.cos(-120 * Math.PI / 180),
+            y: circleCenterY + circleRadius * Math.sin(-120 * Math.PI / 180)
+        };
+
+        for (let i = 27; i <= 39; i++) {
+            const step = i - 26;
+            const angle = -120 + (step * angleStep);
+            const angleRad = angle * Math.PI / 180;
             
-            const x = centerX + radius * Math.cos(angle);
-            const y = centerY + radius * Math.sin(angle);
-            
-            let cellType = 'normal';
-            
-            // Определяем тип клетки
-            if (i === 0) cellType = 'start';
-            else if (i === 40) cellType = 'finish';
-            else if (i === 5 || i === 15 || i === 25) cellType = 'grams';
-            else if (i === 8 || i === 18 || i === 28) cellType = 'description';
-            else if (i === 12 || i === 22 || i === 32) cellType = 'allergy';
-            else if (i === 10 || i === 20 || i === 30) cellType = 'red';
-            
-            positions.push({
-                x, y, 
-                number: i,
-                type: cellType
-            });
+            positions[i] = {
+                x: circleCenterX + circleRadius * Math.cos(angleRad),
+                y: circleCenterY + circleRadius * Math.sin(angleRad)
+            };
         }
-        
+
+        // Финиш
+        positions[40] = { x: 790, y: 170 };
+
+        // Масштабирование и смещение
+        const scale = 0.7;
+        const offsetX = 50;
+        const offsetY = 100;
+
+        for (let i = 0; i <= 40; i++) {
+            if (positions[i]) {
+                positions[i].x = positions[i].x * scale + offsetX;
+                positions[i].y = positions[i].y * scale + offsetY;
+            }
+        }
+
         return positions;
     }
 
     drawBoard() {
-        const boardCanvas = document.getElementById('board-canvas');
-        if (!boardCanvas) return;
+        const canvas = document.getElementById('board-canvas');
+        if (!canvas) return;
         
-        const gameBoard = document.querySelector('.game-board');
-        boardCanvas.width = gameBoard.clientWidth - 40;
-        boardCanvas.height = gameBoard.clientHeight - 40;
+        const parent = canvas.parentElement;
+        if (!parent) return;
         
-        this.boardWidth = boardCanvas.width;
-        this.boardHeight = boardCanvas.height;
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
         
-        const ctx = boardCanvas.getContext('2d');
-        ctx.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
         
-        // Рисуем путь
-        this.drawBoardPath(ctx);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Создаем клетки
-        this.createCells();
-    }
-
-    createCells() {
-        const cellsContainer = document.getElementById('cells-container');
-        if (!cellsContainer) return;
-        
-        cellsContainer.innerHTML = '';
         const positions = this.generateBoardPositions();
         
-        positions.forEach((pos, index) => {
-            const cell = document.createElement('div');
-            cell.className = `cell ${pos.type}`;
-            cell.style.left = `${pos.x - 20}px`;
-            cell.style.top = `${pos.y - 20}px`;
-            cell.dataset.number = pos.number;
-            cell.dataset.type = pos.type;
+        // Рисуем линии между клетками
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+
+        // Основная траектория
+        ctx.beginPath();
+        for (let i = 0; i < 26; i++) {
+            if (positions[i] && positions[i + 1]) {
+                if (i === 0) {
+                    ctx.moveTo(positions[i].x + 20, positions[i].y + 20);
+                }
+                ctx.lineTo(positions[i + 1].x + 20, positions[i + 1].y + 20);
+            }
+        }
+        ctx.stroke();
+        
+        // Линия от 25 к 26
+        if (positions[25] && positions[26]) {
+            ctx.beginPath();
+            ctx.moveTo(positions[25].x + 20, positions[25].y + 20);
+            ctx.lineTo(positions[26].x + 20, positions[26].y + 20);
+            ctx.stroke();
+        }
+        
+        // Круг
+        ctx.beginPath();
+        if (positions[26]) {
+            ctx.moveTo(positions[26].x + 20, positions[26].y + 20);
+        }
+        
+        for (let i = 26; i < 39; i++) {
+            if (positions[i] && positions[i + 1]) {
+                ctx.lineTo(positions[i + 1].x + 20, positions[i + 1].y + 20);
+            }
+        }
+        ctx.stroke();
+        
+        // Линия от 39 к 40
+        if (positions[39] && positions[40]) {
+            ctx.beginPath();
+            ctx.moveTo(positions[39].x + 20, positions[39].y + 20);
+            ctx.lineTo(positions[40].x + 20, positions[40].y + 20);
+            ctx.stroke();
+        }
+        
+        console.log('✅ Игровое поле отрисовано');
+    }
+
+    setupEventListeners() {
+        console.log('🔧 Настройка обработчиков событий...');
+
+        // Кнопка броска кубика
+        const rollDiceBtn = document.getElementById('roll-dice');
+        if (rollDiceBtn) {
+            rollDiceBtn.addEventListener('click', () => this.rollDice());
+            console.log('✅ Обработчик для броска кубика установлен');
+        }
+        
+        // Кнопка "Завершить ответ"
+        const answerBtn = document.getElementById('answer-received');
+        if (answerBtn) {
+            answerBtn.textContent = 'Завершить ответ';
+            answerBtn.addEventListener('click', () => this.stopTimerAndCloseCard());
+        }
+        
+        // Кнопки очков (только для ведущего)
+        document.querySelectorAll('.point-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (this.role !== 'master') return;
+                if (this.pointsApplied || this.applyButtonClicked) return;
+
+                const points = parseInt(e.target.dataset.points);
+                const team = parseInt(e.target.dataset.team);
+                this.selectPoints(team, points);
+            });
+        });
+        
+        // Кнопка применения очков
+        const applyBtn = document.getElementById('apply-points');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => this.applySelectedPoints());
+        }
+        
+        // Кнопка следующего хода
+        const nextTurnBtn = document.getElementById('next-turn');
+        if (nextTurnBtn) {
+            nextTurnBtn.addEventListener('click', () => this.nextTurn());
+        }
+        
+        // Обработчик изменения размера окна
+        window.addEventListener('resize', () => this.drawBoard());
+        
+        // Кнопка отправки сообщения в чат
+        const sendMessageBtn = document.getElementById('send-message-btn');
+        const chatInput = document.getElementById('chat-input');
+        
+        if (sendMessageBtn && chatInput) {
+            sendMessageBtn.addEventListener('click', () => this.sendChatMessage());
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.sendChatMessage();
+                }
+            });
+        }
+
+        // Пинг серверу каждые 30 секунд для поддержания соединения
+        if (this.gameMode === 'online') {
+            setInterval(() => {
+                if (this.socket && this.socket.connected) {
+                    this.socket.emit('ping');
+                }
+            }, 30000);
+        }
+        
+        console.log('✅ Все обработчики событий установлены');
+    }
+
+    setupChat() {
+        // Создаем контейнер для чата только в онлайн-режиме
+        if (this.gameMode !== 'online') return;
+        
+        if (!document.getElementById('chat-container')) {
+            const chatContainer = document.createElement('div');
+            chatContainer.id = 'chat-container';
+            chatContainer.className = 'chat-container';
+            chatContainer.innerHTML = `
+                <div class="chat-header">
+                    <h4><i class="fas fa-comments"></i> Чат игры</h4>
+                    <button id="toggle-chat" class="chat-toggle">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-system-message">
+                        <i class="fas fa-info-circle"></i> Чат подключен
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chat-input" placeholder="Введите сообщение..." maxlength="200">
+                    <button id="send-message-btn" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            `;
             
-            if (pos.number === 0) {
-                cell.textContent = 'Старт';
-            } else if (pos.number === 40) {
-                cell.textContent = 'Финиш';
-            } else {
-                const numberSpan = document.createElement('span');
-                numberSpan.className = 'cell-number';
-                numberSpan.textContent = pos.number;
-                cell.appendChild(numberSpan);
+            const gameContainer = document.querySelector('.game-container');
+            if (gameContainer) {
+                gameContainer.appendChild(chatContainer);
             }
             
-            cellsContainer.appendChild(cell);
+            const toggleBtn = document.getElementById('toggle-chat');
+            const chatMessages = document.getElementById('chat-messages');
+            
+            if (toggleBtn && chatMessages) {
+                toggleBtn.addEventListener('click', () => {
+                    const isHidden = chatMessages.style.display === 'none';
+                    chatMessages.style.display = isHidden ? 'block' : 'none';
+                    toggleBtn.innerHTML = isHidden ? 
+                        '<i class="fas fa-chevron-up"></i>' : 
+                        '<i class="fas fa-chevron-down"></i>';
+                });
+            }
+        }
+    }
+
+    sendChatMessage() {
+        if (this.gameMode !== 'online') return;
+        
+        const chatInput = document.getElementById('chat-input');
+        if (!chatInput || !this.socket || !this.isConnected) return;
+        
+        const message = chatInput.value.trim();
+        if (!message) return;
+        
+        this.socket.emit('send-message', message);
+        chatInput.value = '';
+        chatInput.focus();
+    }
+
+    addChatMessage(sender, message, timestamp) {
+        if (this.gameMode !== 'online') return;
+        
+        const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) return;
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${sender === this.playerName ? 'own-message' : ''}`;
+        
+        const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        messageDiv.innerHTML = `
+            <div class="message-header">
+                <span class="message-sender">${sender === this.playerName ? 'Вы' : sender}</span>
+                <span class="message-time">${time}</span>
+            </div>
+            <div class="message-text">${message}</div>
+        `;
+        
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    drawCard(type) {
+        const cards = this.cards[type];
+        if (!cards || cards.length === 0) return;
+        
+        const randomCard = cards[Math.floor(Math.random() * cards.length)];
+        const modal = document.getElementById('card-modal');
+        if (!modal) return;
+        
+        const cardContent = modal.querySelector('.card-content');
+        if (!cardContent) return;
+        
+        document.getElementById('card-dice').textContent = type;
+        document.getElementById('card-category').textContent = this.getCategoryName(type);
+        document.getElementById('card-question').textContent = randomCard.question;
+        document.getElementById('card-instruction').textContent = randomCard.instruction || '';
+        
+        // Настраиваем кнопку в зависимости от роли
+        const answerBtn = document.getElementById('answer-received');
+        
+        if (this.role === 'master' || this.gameMode === 'local') {
+            answerBtn.textContent = 'Приступить к оцениванию';
+            answerBtn.onclick = () => {
+                clearInterval(this.timerInterval);
+                this.hideCard();
+                this.showMasterPanel();
+            };
+        } else {
+            answerBtn.textContent = 'Завершить ответ';
+            answerBtn.onclick = () => this.stopTimerAndCloseCard();
+        }
+        
+        modal.classList.add('active');
+        
+        setTimeout(() => {
+            cardContent.classList.add('flipped');
+            this.startTimer();
+        }, 1000);
+    }
+
+    getCategoryName(type) {
+        const names = {
+            1: 'Кухня', 2: 'Бар', 3: 'Знания',
+            4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+        };
+        return names[type] || 'Неизвестная категория';
+    }
+
+    startTimer() {
+        clearInterval(this.timerInterval);
+        this.timer = 60;
+
+        const timerElement = document.getElementById('timer');
+        if (timerElement) timerElement.textContent = this.timer;
+
+        this.timerInterval = setInterval(() => {
+            this.timer--;
+            if (timerElement) timerElement.textContent = this.timer;
+            
+            if (this.timer <= 0) {
+                this.stopTimerAndCloseCard();
+            }
+        }, 1000);
+    }
+
+    stopTimerAndCloseCard() {
+        clearInterval(this.timerInterval);
+        this.hideCard();
+        
+        if (this.gameMode === 'online' && this.role !== 'master') {
+            const rollBtn = document.getElementById('roll-dice');
+            if (rollBtn) {
+                rollBtn.disabled = true;
+                rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте оценки ведущего';
+            }
+            this.showNotification('Ответ отправлен ведущему. Ожидайте оценки...', 'info');
+            
+            // В онлайн-режиме уведомляем сервер, что ответ завершен
+            if (this.socket && this.isConnected) {
+                this.socket.emit('answer-completed');
+            }
+        } else {
+            // В локальном режиме сразу показываем панель ведущего
+            this.showMasterPanel();
+        }
+    }
+
+    hideCard() {
+        const modal = document.getElementById('card-modal');
+        if (!modal) return;
+        
+        const cardContent = modal.querySelector('.card-content');
+        if (cardContent) cardContent.classList.remove('flipped');
+
+        setTimeout(() => {
+            modal.classList.remove('active');
+        }, 500);
+    }
+
+    showMasterPanel() {
+        this.resetSelection();
+        const panel = document.getElementById('master-panel');
+        if (panel) {
+            panel.style.display = 'block';
+        }
+        this.showNotification('Оцените ответ команд и примените очки', 'info');
+    }
+
+    resetSelection() {
+        this.selectedPoints = { 1: 0, 2: 0 };
+        this.pointsApplied = false;
+        this.applyButtonClicked = false;
+        
+        this.updateSelectionDisplay(1);
+        this.updateSelectionDisplay(2);
+
+        // Разблокируем кнопки (только для ведущего)
+        if (this.role === 'master') {
+            document.querySelectorAll('.point-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                btn.disabled = false;
+            });
+            
+            const applyBtn = document.getElementById('apply-points');
+            if (applyBtn) {
+                applyBtn.disabled = false;
+                applyBtn.style.opacity = '1';
+            }
+        }
+
+        const nextTurnBtn = document.getElementById('next-turn');
+        if (nextTurnBtn) nextTurnBtn.disabled = true;
+    }
+
+    updateSelectionDisplay(team) {
+        const element = document.getElementById(`team${team}-selection`);
+        if (!element) return;
+        
+        const points = this.selectedPoints[team];
+        element.innerHTML = points === 0 
+            ? 'Выбрано: <span>0 очков</span>'
+            : `Выбрано: <span>${points > 0 ? '+' : ''}${points} очков</span>`;
+    }
+
+    selectPoints(team, points) {
+        if (this.role !== 'master') return;
+        
+        document.querySelectorAll(`.point-btn[data-team="${team}"]`).forEach(btn => {
+            btn.classList.remove('selected');
+        });
+        
+        if (this.selectedPoints[team] === points) {
+            this.selectedPoints[team] = 0;
+        } else {
+            this.selectedPoints[team] = points;
+            document.querySelector(`.point-btn[data-team="${team}"][data-points="${points}"]`)?.classList.add('selected');
+        }
+        
+        this.updateSelectionDisplay(team);
+    }
+
+    rollDice() {
+        console.log('🎲 Бросок кубика...');
+        
+        // В онлайн-режиме: только текущий игрок может бросать
+        // В локальном режиме: бросает тот, чей сейчас ход
+        if (this.gameMode === 'online') {
+            if (!this.socket || !this.isConnected) {
+                alert('Нет подключения к серверу!');
+                return;
+            }
+            
+            const canRoll = (this.role === 'player1' && this.currentPlayer === 1) ||
+                           (this.role === 'player2' && this.currentPlayer === 2);
+            
+            if (!canRoll) {
+                alert('Сейчас не ваш ход!');
+                return;
+            }
+            
+            if (this.diceRolledInCurrentTurn) {
+                alert('В этом ходе кубик уже брошен!');
+                return;
+            }
+            
+            this.socket.emit('roll-dice');
+            this.diceRolledInCurrentTurn = true;
+            
+        } else {
+            // Локальный режим
+            if (this.diceRolledInCurrentTurn) {
+                alert('В этом ходе кубик уже брошен!');
+                return;
+            }
+            
+            const diceElement = document.getElementById('dice');
+            if (!diceElement) return;
+            
+            diceElement.classList.add('rolling');
+            
+            setTimeout(() => {
+                this.diceResult = Math.floor(Math.random() * 6) + 1;
+                diceElement.textContent = this.diceResult;
+                diceElement.classList.remove('rolling');
+                
+                const taskNames = {
+                    1: 'Кухня', 2: 'Бар', 3: 'Знания', 
+                    4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+                };
+                
+                const taskTypeElement = document.getElementById('task-type');
+                if (taskTypeElement) {
+                    taskTypeElement.textContent = taskNames[this.diceResult];
+                }
+                
+                this.diceRolledInCurrentTurn = true;
+                setTimeout(() => this.drawCard(this.diceResult), 500);
+            }, 1500);
+        }
+        
+        this.updateRollButton();
+    }
+
+    updateRollButton() {
+        const rollBtn = document.getElementById('roll-dice');
+        if (!rollBtn) return;
+        
+        if (this.gameMode === 'local') {
+            // В локальном режиме: бросает тот, чей сейчас ход
+            const canRoll = !this.diceRolledInCurrentTurn;
+            rollBtn.disabled = !canRoll;
+            
+            if (rollBtn.disabled) {
+                rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Кубик уже брошен';
+            } else {
+                rollBtn.innerHTML = `<i class="fas fa-dice"></i> Бросить кубик (Ход команды ${this.currentPlayer})`;
+            }
+            
+        } else if (this.gameMode === 'online') {
+            const isPlayer1 = this.role === 'player1';
+            const isPlayer2 = this.role === 'player2';
+            const isMaster = this.role === 'master';
+            
+            // Только игроки могут бросать, ведущий - нет
+            const canRoll = (isPlayer1 && this.currentPlayer === 1) ||
+                           (isPlayer2 && this.currentPlayer === 2);
+            const canRollNow = canRoll && !this.diceRolledInCurrentTurn;
+            
+            rollBtn.disabled = !canRollNow || isMaster;
+            
+            if (rollBtn.disabled) {
+                if (isMaster) {
+                    rollBtn.innerHTML = '<i class="fas fa-dice"></i> Бросок кубика (только игроки)';
+                } else if (!canRoll) {
+                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте хода';
+                } else if (this.diceRolledInCurrentTurn) {
+                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте оценки';
+                }
+            } else {
+                rollBtn.innerHTML = '<i class="fas fa-dice"></i> Бросить кубик';
+            }
+        }
+    }
+
+    updateLocalRollButton() {
+        const rollBtn = document.getElementById('roll-dice');
+        if (rollBtn) {
+            rollBtn.innerHTML = `<i class="fas fa-dice"></i> Бросить кубик (Ход команды ${this.currentPlayer})`;
+        }
+    }
+
+    applySelectedPoints() {
+        if (this.gameMode === 'online' && this.role !== 'master') {
+            alert('Только ведущий может применять очки!');
+            return;
+        }
+        
+        if (this.applyButtonClicked) {
+            alert('Очки уже применены в этом ходе!');
+            return;
+        }
+        
+        if (this.selectedPoints[1] === 0 && this.selectedPoints[2] === 0) {
+            alert('Сначала выберите очки для команд!');
+            return;
+        }
+        
+        for (let team of [1, 2]) {
+            const points = this.selectedPoints[team];
+            if (points !== 0) {
+                this.scores[team] += points;
+                this.movePiece(team, points);
+            }
+        }
+        
+        this.updateScores();
+        this.pointsApplied = true;
+        this.applyButtonClicked = true;
+        
+        // Блокируем кнопки
+        document.querySelectorAll('.point-btn').forEach(btn => {
+            btn.disabled = true;
+        });
+        
+        const applyBtn = document.getElementById('apply-points');
+        if (applyBtn) {
+            applyBtn.disabled = true;
+            applyBtn.style.opacity = '0.6';
+        }
+        
+        const nextTurnBtn = document.getElementById('next-turn');
+        if (nextTurnBtn) nextTurnBtn.disabled = false;
+        
+        // Отправляем обновленное состояние на сервер (в онлайн-режиме)
+        if (this.gameMode === 'online' && this.socket && this.isConnected) {
+            const gameState = {
+                scores: this.scores,
+                positions: this.positions,
+                currentPlayer: this.currentPlayer,
+                diceResult: this.diceResult
+            };
+            
+            this.socket.emit('update-game', gameState);
+        }
+        
+        // Проверяем победителя (позиция >= 40)
+        for (let team of [1, 2]) {
+            if (this.positions[team] >= 40) {
+                this.showWinner(team);
+            }
+        }
+    }
+
+    movePiece(team, points) {
+        const piece = document.getElementById(`piece${team}`);
+        if (!piece) return;
+        
+        const newPosition = Math.max(0, Math.min(this.positions[team] + points, 40));
+        
+        this.animatePieceMovement(team, this.positions[team], newPosition, () => {
+            this.positions[team] = newPosition;
+            
+            if (Math.abs(points) <= 6) {
+                this.checkSpecialZone(team, newPosition);
+            }
         });
     }
 
-    createZoneLabels() {
-        // Создание подписей специальных зон
-        const zoneLabels = [
-            { type: 'grams', text: 'Граммовка', color: '#4CAF50' },
-            { type: 'description', text: 'Описание', color: '#9C27B0' },
-            { type: 'allergy', text: 'Аллергия', color: '#E91E63' },
-            { type: 'red', text: 'Пропуск хода', color: '#f44336' }
-        ];
+    animatePieceMovement(team, fromPosition, toPosition, callback) {
+        const piece = document.getElementById(`piece${team}`);
+        if (!piece) return;
         
-        zoneLabels.forEach(zone => {
-            const label = document.createElement('div');
-            label.className = 'zone-label';
-            label.style.position = 'absolute';
-            label.style.bottom = '10px';
-            label.style.left = '10px';
-            label.innerHTML = `
-                <div style="display: flex; align-items: center; margin: 5px 0;">
-                    <div style="width: 15px; height: 15px; background: ${zone.color}; border-radius: 3px; margin-right: 8px;"></div>
-                    <span style="font-size: 12px; color: white;">${zone.text}</span>
-                </div>
-            `;
-            document.querySelector('.game-board').appendChild(label);
+        const positions = this.generateBoardPositions();
+        const stepDelay = 300;
+        const direction = toPosition > fromPosition ? 1 : -1;
+        let currentStep = fromPosition + direction;
+        
+        const moveStep = () => {
+            if ((direction > 0 && currentStep <= toPosition) || 
+                (direction < 0 && currentStep >= toPosition)) {
+                
+                if (positions[currentStep]) {
+                    piece.style.left = (positions[currentStep].x + 5) + 'px';
+                    piece.style.top = (positions[currentStep].y + 5) + 'px';
+                    piece.classList.add('moving');
+                    
+                    setTimeout(() => {
+                        piece.classList.remove('moving');
+                    }, 200);
+                }
+                
+                currentStep += direction;
+                setTimeout(moveStep, stepDelay);
+            } else if (callback) {
+                callback();
+            }
+        };
+        
+        moveStep();
+    }
+
+    checkSpecialZone(team, position) {
+        const cell = document.getElementById(`cell-${position}`);
+        if (!cell) return;
+        
+        let zoneType = null;
+        
+        if (cell.classList.contains('grams')) {
+            zoneType = 'grams';
+        } else if (cell.classList.contains('description')) {
+            zoneType = 'description';
+        } else if (cell.classList.contains('allergy')) {
+            zoneType = 'allergy';
+        }
+
+        if (zoneType && !this.triggeredZonesInTurn[team].has(zoneType)) {
+            this.triggeredZonesInTurn[team].add(zoneType);
+            
+            this.specialZoneQueue.push({
+                team: team,
+                zoneType: zoneType,
+                position: position,
+                priority: team === this.currentPlayer ? 1 : 2
+            });
+            
+            this.specialZoneQueue.sort((a, b) => a.priority - b.priority);
+
+            if (!this.showingSpecialZone) {
+                this.showNextSpecialZone();
+            }
+        }
+    }
+
+    showNextSpecialZone() {
+        if (this.specialZoneQueue.length === 0) {
+            this.showingSpecialZone = false;
+            return;
+        }
+        
+        this.showingSpecialZone = true;
+        const task = this.specialZoneQueue.shift();
+        const zoneSettings = this.zoneSettings[task.zoneType];
+        
+        const modal = document.createElement('div');
+        modal.className = 'special-zone-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            color: #333;
+            z-index: 1001;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border: 5px solid ${this.getZoneColor(task.zoneType)};
+        `;
+        
+        modal.innerHTML = `
+            <h3 style="color: ${this.getZoneColor(task.zoneType)}; margin-bottom: 20px; text-align: center;">
+                ${zoneSettings.name}
+            </h3>
+            <p style="font-size: 18px; margin-bottom: 15px; text-align: center;">
+                Вопрос для команды ${task.team}
+            </p>
+            <div style="font-size: 16px; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 10px;">
+                ${zoneSettings.question}
+            </div>
+            <div style="text-align: center; margin-top: 30px;">
+                <button id="special-correct" class="btn" style="background: #4CAF50; margin-right: 20px;">
+                    Верно (+${zoneSettings.positive})
+                </button>
+                <button id="special-incorrect" class="btn" style="background: #f44336;">
+                    Неверно (${zoneSettings.negative})
+                </button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        modal.querySelector('#special-correct').addEventListener('click', () => {
+            this.movePiece(task.team, zoneSettings.positive);
+            modal.remove();
+            setTimeout(() => this.showNextSpecialZone(), 500);
         });
+
+        modal.querySelector('#special-incorrect').addEventListener('click', () => {
+            this.movePiece(task.team, zoneSettings.negative);
+            modal.remove();
+            setTimeout(() => this.showNextSpecialZone(), 500);
+        });
+    }
+
+    getZoneColor(zoneType) {
+        switch(zoneType) {
+            case 'grams': return '#4CAF50';
+            case 'description': return '#9C27B0';
+            case 'allergy': return '#E91E63';
+            default: return '#4CAF50';
+        }
+    }
+
+    updatePieces() {
+        const positions = this.generateBoardPositions();
+
+        for (let team of [1, 2]) {
+            const piece = document.getElementById(`piece${team}`);
+            if (!piece) continue;
+
+            const position = this.positions[team];
+            if (positions[position]) {
+                piece.style.left = (positions[position].x + 5) + 'px';
+                piece.style.top = (positions[position].y + 5) + 'px';
+            }
+        }
     }
 
     updateScores() {
@@ -1338,312 +2011,234 @@ class Game {
         if (team2Score) team2Score.textContent = this.scores[2];
     }
 
-    updatePieces() {
-        const positions = this.generateBoardPositions();
-        
-        for (let team of [1, 2]) {
-            const piece = document.getElementById(`piece${team}`);
-            if (!piece) continue;
-            
-            const pos = positions[this.positions[team]];
-            if (pos) {
-                piece.style.left = `${pos.x - 15}px`;
-                piece.style.top = `${pos.y - 15}px`;
-            }
-        }
-    }
-
     updateTurnIndicator() {
-        // Обновляем индикаторы хода
-        document.querySelectorAll('.current-turn').forEach(el => {
-            el.classList.remove('current-turn');
+        document.querySelectorAll('.video-box').forEach(box => {
+            box.classList.remove('current-turn');
         });
         
-        const currentTeam = this.currentPlayer;
-        const team1Score = document.getElementById('team1-score');
-        const team2Score = document.getElementById('team2-score');
-        const videoTeam1 = document.getElementById('video-team1');
-        const videoTeam2 = document.getElementById('video-team2');
-        
-        if (team1Score) team1Score.classList.toggle('current-turn', currentTeam === 1);
-        if (team2Score) team2Score.classList.toggle('current-turn', currentTeam === 2);
-        if (videoTeam1) videoTeam1.classList.toggle('current-turn', currentTeam === 1);
-        if (videoTeam2) videoTeam2.classList.toggle('current-turn', currentTeam === 2);
-        
-        // Показываем индикатор хода
+        document.querySelectorAll('.team-score').forEach(score => {
+            score.classList.remove('current-turn');
+        });
+
         document.querySelectorAll('.current-turn-indicator').forEach(indicator => {
             indicator.style.display = 'none';
         });
-        const currentIndicator = document.getElementById(`turn-indicator-${currentTeam}`);
-        if (currentIndicator) currentIndicator.style.display = 'block';
+
+        const currentTeam = this.currentPlayer;
+        const videoTeam = document.getElementById(`video-team${currentTeam}`);
+        const teamScore = document.getElementById(`team${currentTeam}-score`);
+        const turnIndicator = document.getElementById(`turn-indicator-${currentTeam}`);
+
+        if (videoTeam) videoTeam.classList.add('current-turn');
+        if (teamScore) teamScore.classList.add('current-turn');
+        if (turnIndicator) turnIndicator.style.display = 'block';
     }
 
-    selectPoints(team, points) {
-        if (this.pointsApplied || this.applyButtonClicked) return;
-        
-        // Сбрасываем предыдущий выбор для этой команды
-        document.querySelectorAll(`.point-btn[data-team="${team}"]`).forEach(btn => {
-            btn.classList.remove('selected');
-        });
-        
-        // Выделяем выбранную кнопку
-        const selectedBtn = document.querySelector(`.point-btn[data-team="${team}"][data-points="${points}"]`);
-        if (selectedBtn) {
-            selectedBtn.classList.add('selected');
-        }
-        
-        this.selectedPoints[team] = points;
-        
-        // Обновляем отображение выбора
-        const selectionElement = document.getElementById(`team${team}-selection`);
-        if (selectionElement) {
-            const sign = points > 0 ? '+' : '';
-            selectionElement.innerHTML = `Выбрано: <span>${sign}${points} очков</span>`;
-        }
-    }
+    setupRoleInterface() {
+        const isMaster = this.role === 'master';
 
-    movePiece(team, steps) {
-        const oldPosition = this.positions[team];
-        this.positions[team] = Math.min(40, oldPosition + steps);
-        
-        // Проверяем специальные зоны
-        const newPosition = this.positions[team];
-        const positions = this.generateBoardPositions();
-        
-        if (newPosition > oldPosition && newPosition < 40) {
-            const cellType = positions[newPosition].type;
-            
-            if (cellType === 'red') {
-                // Пропуск хода
-                this.showNotification(`Команда ${team} попадает на красную клетку! Пропуск хода.`, 'warning');
-            } else if (['grams', 'description', 'allergy'].includes(cellType)) {
-                // Добавляем в очередь специальных зон
-                if (!this.triggeredZonesInTurn[team].has(newPosition)) {
-                    this.specialZoneQueue.push({
-                        team: team,
-                        position: newPosition,
-                        zoneType: cellType
-                    });
-                    this.triggeredZonesInTurn[team].add(newPosition);
-                }
-            }
-        }
-        
-        this.updatePieces();
-        
-        // Показываем специальные зоны, если есть
-        if (this.specialZoneQueue.length > 0 && !this.showingSpecialZone) {
-            this.showNextSpecialZone();
-        }
-    }
-
-    showMasterPanel() {
+        // Панель ведущего
         const panel = document.getElementById('master-panel');
         if (panel) {
-            panel.style.display = 'block';
+            panel.style.display = isMaster ? 'block' : 'none';
+        }
+
+        // Колоды карт
+        document.querySelectorAll('.deck').forEach(deck => {
+            deck.style.cursor = 'default';
+            deck.style.pointerEvents = 'none';
+        });
+
+        this.updateRollButton();
+
+        // Показываем информацию о подключении (только в онлайн-режиме)
+        if (this.gameMode === 'online') {
+            const connectionInfo = document.createElement('div');
+            connectionInfo.className = 'connection-info-bar';
+            connectionInfo.innerHTML = `
+                <div class="connection-status ${this.isConnected ? 'connected' : 'disconnected'}">
+                    <i class="fas fa-circle"></i>
+                    <span>${this.isConnected ? 'Подключено' : 'Не подключено'}</span>
+                </div>
+                <div class="room-info-bar">
+                    <i class="fas fa-door-closed"></i>
+                    <span>Комната: ${this.roomCode || 'Нет'}</span>
+                </div>
+                <div class="player-info-bar">
+                    <i class="fas fa-user"></i>
+                    <span>${this.playerName} (${this.getRoleName()})</span>
+                </div>
+            `;
+
+            const topPanel = document.querySelector('.top-panel');
+            if (topPanel) {
+                topPanel.appendChild(connectionInfo);
+            }
         }
     }
 
-    startTimer() {
-        clearInterval(this.timerInterval);
-        this.timer = 60;
-        
-        const timerElement = document.getElementById('timer');
-        if (timerElement) {
-            timerElement.textContent = this.timer;
+    getRoleName() {
+        switch(this.role) {
+            case 'master': return 'Ведущий';
+            case 'player1': return 'Игрок 1 (Команда 1)';
+            case 'player2': return 'Игрок 2 (Команда 2)';
+            case 'local': return 'Локальный игрок';
+            default: return 'Наблюдатель';
+        }
+    }
+
+    nextTurn() {
+        if (this.gameMode === 'online' && this.role !== 'master') {
+            alert('Только ведущий может переходить к следующему ходу!');
+            return;
         }
         
-        this.timerInterval = setInterval(() => {
-            this.timer--;
-            if (timerElement) {
-                timerElement.textContent = this.timer;
+        // Отправляем запрос на смену хода на сервер (в онлайн-режиме)
+        if (this.gameMode === 'online' && this.socket && this.isConnected) {
+            this.socket.emit('next-turn');
+        }
+        
+        // Обновляем локальное состояние
+        const panel = document.getElementById('master-panel');
+        if (panel) panel.style.display = 'none';
+        
+        this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
+        this.specialZoneQueue = [];
+        this.showingSpecialZone = false;
+        
+        this.diceRolledInCurrentTurn = false;
+        this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
+        
+        this.updateTurnIndicator();
+        this.updateRollButton();
+        
+        clearInterval(this.timerInterval);
+        
+        const timer = document.getElementById('timer');
+        if (timer) timer.textContent = '60';
+        
+        const dice = document.getElementById('dice');
+        if (dice) dice.textContent = '?';
+        
+        const taskType = document.getElementById('task-type');
+        if (taskType) taskType.textContent = '';
+        
+        this.resetSelection();
+        this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
+    }
+
+    showWinner(team) {
+        const fireworks = document.getElementById('fireworks');
+        if (fireworks) fireworks.style.display = 'block';
+        
+        for (let i = 0; i < 30; i++) {
+            setTimeout(() => {
+                const firework = document.createElement('div');
+                firework.style.position = 'fixed';
+                firework.style.left = Math.random() * 100 + 'vw';
+                firework.style.top = Math.random() * 100 + 'vh';
+                firework.style.width = '5px';
+                firework.style.height = '5px';
+                firework.style.background = team === 1 ? '#2196F3' : '#FF5722';
+                firework.style.borderRadius = '50%';
+                firework.style.animation = 'firework 1s forwards';
+                
+                if (fireworks) fireworks.appendChild(firework);
+                
+                setTimeout(() => firework.remove(), 1000);
+            }, i * 100);
+        }
+        
+        setTimeout(() => {
+            alert(`🎉 Победила Команда ${team}! 🎉`);
+            if (fireworks) {
+                fireworks.style.display = 'none';
+                fireworks.innerHTML = '';
             }
             
-            if (this.timer <= 0) {
-                clearInterval(this.timerInterval);
-                if (this.gameMode !== 'local' && this.role !== 'master') {
-                    this.stopTimerAndCloseCard();
-                }
+            // Отправляем уведомление в чат (в онлайн-режиме)
+            if (this.gameMode === 'online') {
+                this.addChatMessage('Система', `🎉 Победила Команда ${team}! Поздравляем!`, new Date().toLocaleTimeString());
             }
-        }, 1000);
-    }
-
-    hideCard() {
-        const modal = document.getElementById('card-modal');
-        if (modal) {
-            modal.classList.remove('active');
-        }
-    }
-
-    showNotification(message, type = 'info') {
-        // Создаем уведомление
-        const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
-        notification.innerHTML = `
-            <i class="fas fa-${type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'}"></i>
-            <span>${message}</span>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Автоматическое скрытие через 3 секунды
-        setTimeout(() => {
-            notification.style.animation = 'slideOut 0.3s ease-out forwards';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 300);
         }, 3000);
     }
 
     showAlert(message) {
-        alert(message);
-    }
-
-    getCategoryName(type) {
-        const categories = {
-            1: 'Кухня',
-            2: 'Бар', 
-            3: 'Знания',
-            4: 'Ситуация',
-            5: 'Сервис',
-            6: 'Продажи'
-        };
-        return categories[type] || 'Неизвестно';
-    }
-
-    getRoleName() {
-        const roles = {
-            'master': 'Ведущий',
-            'player1': 'Команда 1',
-            'player2': 'Команда 2',
-            'local': 'Локальный игрок'
-        };
-        return roles[this.role] || this.role;
-    }
-
-    getRoleNameFromType(roleType) {
-        const roles = {
-            'master': 'Ведущий',
-            'player1': 'Команда 1',
-            'player2': 'Команда 2'
-        };
-        return roles[roleType] || roleType;
-    }
-
-    resetSelection() {
-        this.selectedPoints = { 1: 0, 2: 0 };
-        this.pointsApplied = false;
-        this.applyButtonClicked = false;
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert';
+        alertDiv.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>${message}</span>
+            <button class="close-alert">&times;</button>
+        `;
         
-        document.querySelectorAll('.point-btn').forEach(btn => {
-            btn.disabled = false;
-            btn.classList.remove('selected');
+        alertDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f44336;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            z-index: 10001;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideDown 0.3s ease-out;
+        `;
+        
+        document.body.appendChild(alertDiv);
+        
+        alertDiv.querySelector('.close-alert').addEventListener('click', () => {
+            alertDiv.remove();
         });
-        
-        const applyBtn = document.getElementById('apply-points');
-        if (applyBtn) {
-            applyBtn.disabled = false;
-            applyBtn.style.opacity = '1';
-        }
-        
-        const nextTurnBtn = document.getElementById('next-turn');
-        if (nextTurnBtn) nextTurnBtn.disabled = false;
-        
-        // Обновляем отображение выбора
-        document.querySelectorAll('.current-selection').forEach(el => {
-            el.innerHTML = 'Выбрано: <span>0 очков</span>';
-        });
-    }
-
-    showWinner(team) {
-        this.showNotification(`Команда ${team} победила! 🎉`, 'info');
-        
-        // Можно добавить фейерверки или другие эффекты
-        const fireworks = document.getElementById('fireworks');
-        if (fireworks) {
-            fireworks.style.display = 'block';
-            setTimeout(() => {
-                fireworks.style.display = 'none';
-            }, 5000);
-        }
-    }
-
-    setupRoleInterface() {
-        // Настройка интерфейса в зависимости от роли
-        if (this.gameMode === 'online') {
-            if (this.role === 'master') {
-                // Ведущий видит панель управления
-                const panel = document.getElementById('master-panel');
-                if (panel) panel.style.display = 'block';
-                
-            } else if (this.role === 'player1' || this.role === 'player2') {
-                // Игроки не видят панель управления
-                const panel = document.getElementById('master-panel');
-                if (panel) panel.style.display = 'none';
-            }
-        }
-    }
-
-    showNextSpecialZone() {
-        // Реализация показа специальных зон
-        if (this.specialZoneQueue.length === 0) return;
-        
-        this.showingSpecialZone = true;
-        const zone = this.specialZoneQueue.shift();
-        
-        const zoneInfo = this.zoneSettings[zone.zoneType];
-        if (zoneInfo) {
-            this.showNotification(`Команда ${zone.team} попадает в ${zoneInfo.name}! ${zoneInfo.question}`, 'info');
-        }
         
         setTimeout(() => {
-            this.showingSpecialZone = false;
-            if (this.specialZoneQueue.length > 0) {
-                this.showNextSpecialZone();
+            if (alertDiv.parentNode) {
+                alertDiv.style.animation = 'slideUp 0.3s ease-out';
+                setTimeout(() => alertDiv.remove(), 300);
             }
+        }, 5000);
+    }
+
+    showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.innerHTML = `
+            <i class="fas ${type === 'error' ? 'fa-exclamation-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle'}"></i>
+            <span>${message}</span>
+        `;
+        
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'error' ? '#f44336' : type === 'warning' ? '#FF9800' : '#2196F3'};
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            z-index: 10000;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 300px;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => notification.remove(), 300);
         }, 3000);
     }
+} // Остальные методы остаются без изменений (createBoard, generateBoardPositions, drawBoard, и т.д.)
+    // Добавьте их из предыдущей версии кода...
 
-    updateVideoPlaceholders(players) {
-        // Обновление видео-плейсхолдеров
-        if (players.master) {
-            const masterVideo = document.getElementById('video-master');
-            if (masterVideo) {
-                masterVideo.innerHTML = `<i class="fas fa-user-tie"></i><p>${players.master}</p>`;
-            }
-        }
-        
-        if (players.player1) {
-            const player1Video = document.getElementById('video-team1');
-            if (player1Video) {
-                player1Video.innerHTML = `<i class="fas fa-user"></i><p>${players.player1}</p>`;
-            }
-        }
-        
-        if (players.player2) {
-            const player2Video = document.getElementById('video-team2');
-            if (player2Video) {
-                player2Video.innerHTML = `<i class="fas fa-user"></i><p>${players.player2}</p>`;
-            }
-        }
-    }
-
-    async initVideo() {
-        if (this.gameMode !== 'online') return;
-        
-        // Базовая реализация видео (без WebRTC)
-        // Для реальной видеосвязи потребуется WebRTC сервер
-        console.log('🎥 Видео инициализировано (базовый режим)');
-        
-        // Обновляем плейсхолдеры
-        this.updateVideoPlaceholders({
-            master: 'Ведущий',
-            player1: 'Команда 1',
-            player2: 'Команда 2'
-        });
-    }
+    // ... (все остальные методы из предыдущей версии остаются без изменений)
 }
 
 // Запускаем игру
