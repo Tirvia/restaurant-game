@@ -96,65 +96,41 @@ class Game {
                     
                     <div class="mode-options">
                         <div class="mode-option">
-                            <input type="radio" id="mode-online" name="mode" value="online">
-                            <label for="mode-online" class="mode-label">
+                            <button class="mode-btn" data-mode="online">
                                 <i class="fas fa-globe"></i>
                                 <div>
                                     <strong>Онлайн-игра</strong>
                                     <small>Игра по сети с друзьями</small>
-                                    <div class="mode-details">
-                                        <p><i class="fas fa-check"></i> 3 игрока: ведущий + 2 команды</p>
-                                        <p><i class="fas fa-check"></i> Видеосвязь</p>
-                                        <p><i class="fas fa-check"></i> Чат</p>
-                                    </div>
                                 </div>
-                            </label>
+                            </button>
                         </div>
                         
                         <div class="mode-option">
-                            <input type="radio" id="mode-local" name="mode" value="local">
-                            <label for="mode-local" class="mode-label">
+                            <button class="mode-btn" data-mode="local">
                                 <i class="fas fa-desktop"></i>
                                 <div>
                                     <strong>Один компьютер</strong>
                                     <small>Игра на одном устройстве</small>
-                                    <div class="mode-details">
-                                        <p><i class="fas fa-check"></i> Все роли на одном экране</p>
-                                        <p><i class="fas fa-check"></i> Без подключения к интернету</p>
-                                        <p><i class="fas fa-check"></i> Для обучения и практики</p>
-                                    </div>
                                 </div>
-                            </label>
+                            </button>
                         </div>
                     </div>
                     
-                    <button id="select-mode" class="btn" style="background: #4CAF50; width: 100%; margin-top: 20px;">
-                        <i class="fas fa-arrow-right"></i> Продолжить
-                    </button>
+                    <div class="game-info">
+                        <p><i class="fas fa-info-circle"></i> Для онлайн-игры нужно 3 человека: ведущий и 2 игрока</p>
+                    </div>
                 </div>
             `;
             
             document.body.appendChild(modal);
             
-            const selectBtn = document.getElementById('select-mode');
+            const modeButtons = modal.querySelectorAll('.mode-btn');
             
-            selectBtn.addEventListener('click', () => {
-                const selectedMode = modal.querySelector('input[name="mode"]:checked')?.value;
-                
-                if (!selectedMode) {
-                    alert('Пожалуйста, выберите режим игры');
-                    return;
-                }
-                
-                this.gameMode = selectedMode;
-                modal.remove();
-                resolve();
-            });
-            
-            // Автовыбор при нажатии на опцию
-            modal.querySelectorAll('.mode-option input').forEach(input => {
-                input.addEventListener('change', () => {
-                    selectBtn.style.display = 'block';
+            modeButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.gameMode = btn.dataset.mode;
+                    modal.remove();
+                    resolve();
                 });
             });
         });
@@ -199,13 +175,6 @@ class Game {
                 <div class="role-selection-content">
                     <h2><i class="fas fa-gamepad"></i> Подключение к игре</h2>
                     
-                    <div class="connection-info">
-                        <div class="server-status">
-                            <i class="fas fa-server"></i>
-                            <span>Сервер: ${this.serverUrl}</span>
-                        </div>
-                    </div>
-                    
                     <!-- Ввод имени -->
                     <div class="name-input-section">
                         <label for="player-name"><i class="fas fa-user"></i> Введите ваше имя:</label>
@@ -216,38 +185,29 @@ class Game {
                     <div class="role-options">
                         <h3><i class="fas fa-user-tag"></i> Выберите роль:</h3>
                         
-                        <div class="role-option">
-                            <input type="radio" id="role-master" name="role" value="master">
-                            <label for="role-master" class="role-label">
-                                <i class="fas fa-crown"></i>
-                                <div>
-                                    <strong>Ведущий</strong>
-                                    <small>Создаёт комнату и управляет игрой</small>
-                                </div>
-                            </label>
-                        </div>
+                        <button class="role-btn" data-role="master">
+                            <i class="fas fa-crown"></i>
+                            <div>
+                                <strong>Ведущий</strong>
+                                <small>Создаёт комнату и управляет игрой</small>
+                            </div>
+                        </button>
                         
-                        <div class="role-option">
-                            <input type="radio" id="role-player1" name="role" value="player1">
-                            <label for="role-player1" class="role-label">
-                                <i class="fas fa-user-friends"></i>
-                                <div>
-                                    <strong>Игрок 1</strong>
-                                    <small>Команда 1 (синие)</small>
-                                </div>
-                            </label>
-                        </div>
+                        <button class="role-btn" data-role="player1">
+                            <i class="fas fa-user-friends"></i>
+                            <div>
+                                <strong>Игрок 1</strong>
+                                <small>Команда 1 (синие)</small>
+                            </div>
+                        </button>
                         
-                        <div class="role-option">
-                            <input type="radio" id="role-player2" name="role" value="player2">
-                            <label for="role-player2" class="role-label">
-                                <i class="fas fa-user-friends"></i>
-                                <div>
-                                    <strong>Игрок 2</strong>
-                                    <small>Команда 2 (оранжевые)</small>
-                                </div>
-                            </label>
-                        </div>
+                        <button class="role-btn" data-role="player2">
+                            <i class="fas fa-user-friends"></i>
+                            <div>
+                                <strong>Игрок 2</strong>
+                                <small>Команда 2 (оранжевые)</small>
+                            </div>
+                        </button>
                     </div>
                     
                     <!-- Секция для ведущего -->
@@ -287,6 +247,11 @@ class Game {
                         <span id="status-text">Подключение к серверу...</span>
                     </div>
                     
+                    <!-- Информация об игре -->
+                    <div class="game-info">
+                        <p><i class="fas fa-info-circle"></i> Для игры нужно 3 человека: ведущий и 2 игрока</p>
+                    </div>
+                    
                     <button id="back-to-mode" class="btn" style="background: #666; width: 100%; margin-top: 10px;">
                         <i class="fas fa-arrow-left"></i> Назад к выбору режима
                     </button>
@@ -297,7 +262,7 @@ class Game {
             
             // Элементы DOM
             const nameInput = document.getElementById('player-name');
-            const roleInputs = modal.querySelectorAll('input[name="role"]');
+            const roleBtns = modal.querySelectorAll('.role-btn');
             const masterSection = modal.querySelector('#master-section');
             const playerSection = modal.querySelector('#player-section');
             const createBtn = modal.querySelector('#create-room-btn');
@@ -321,9 +286,14 @@ class Game {
             this.setupSocketConnection(modal, resolve);
             
             // Показать/скрыть секции
-            roleInputs.forEach(input => {
-                input.addEventListener('change', () => {
-                    this.role = input.value;
+            roleBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.role = btn.dataset.role;
+                    
+                    // Снять выделение со всех кнопок
+                    roleBtns.forEach(b => b.classList.remove('selected'));
+                    // Выделить текущую
+                    btn.classList.add('selected');
                     
                     if (this.role === 'master') {
                         masterSection.style.display = 'block';
@@ -346,6 +316,7 @@ class Game {
                 }
                 
                 this.playerName = playerName;
+                this.role = 'master';
                 
                 statusText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Создаем комнату...';
                 this.socket.emit('create-room', playerName);
@@ -355,7 +326,6 @@ class Game {
             joinBtn.addEventListener('click', () => {
                 const playerName = nameInput.value.trim();
                 const roomCode = roomCodeInput.value.trim().toUpperCase();
-                const selectedRole = modal.querySelector('input[name="role"]:checked')?.value;
                 
                 if (!playerName) {
                     this.showAlert('Пожалуйста, введите имя');
@@ -367,20 +337,19 @@ class Game {
                     return;
                 }
                 
-                if (!selectedRole) {
+                if (!this.role) {
                     this.showAlert('Пожалуйста, выберите роль');
                     return;
                 }
                 
                 this.playerName = playerName;
-                this.role = selectedRole;
                 this.roomCode = roomCode;
                 
                 statusText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Присоединяемся к комнате...';
                 this.socket.emit('join-room', {
                     roomCode: roomCode,
                     playerName: playerName,
-                    role: selectedRole
+                    role: this.role
                 });
             });
             
@@ -530,8 +499,51 @@ class Game {
             this.updateVideoPlaceholders(data.players);
         });
         
+        this.socket.on('player-left', (data) => {
+            this.showNotification(`${data.playerName} покинул игру`, 'warning');
+            
+            // Обновляем видео-плейсхолдеры
+            if (data.role === 'player1') {
+                document.querySelector('#video-team1 .video-placeholder p').textContent = 'Команда 1';
+            } else if (data.role === 'player2') {
+                document.querySelector('#video-team2 .video-placeholder p').textContent = 'Команда 2';
+            }
+        });
+        
+        this.socket.on('room-closed', (message) => {
+            this.showNotification(message, 'error');
+            setTimeout(() => {
+                location.reload(); // Перезагружаем страницу
+            }, 3000);
+        });
+        
         this.socket.on('dice-rolled', (data) => {
-            this.handleDiceRolled(data);
+            this.diceResult = data.dice;
+            const diceElement = document.getElementById('dice');
+            if (diceElement) {
+                diceElement.textContent = data.dice;
+                diceElement.classList.add('rolling');
+                
+                setTimeout(() => {
+                    diceElement.classList.remove('rolling');
+                }, 500);
+            }
+            
+            // Обновляем тип задачи
+            const taskNames = {
+                1: 'Кухня', 2: 'Бар', 3: 'Знания', 
+                4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+            };
+            
+            const taskTypeElement = document.getElementById('task-type');
+            if (taskTypeElement) {
+                taskTypeElement.textContent = taskNames[data.dice];
+            }
+            
+            // Показываем карточку с вопросом
+            setTimeout(() => this.drawCard(data.dice), 800);
+            
+            this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
         });
         
         this.socket.on('game-updated', (gameState) => {
@@ -571,6 +583,16 @@ class Game {
             if (data.exists) {
                 roomStatus.innerHTML = `<i class="fas fa-check-circle"></i> Комната найдена`;
                 roomStatus.className = 'room-status found';
+                
+                // Показываем информацию о занятости ролей
+                if (data.players) {
+                    let statusText = '';
+                    if (data.players.player1) statusText += 'Игрок 1 занят, ';
+                    if (data.players.player2) statusText += 'Игрок 2 занят';
+                    if (statusText) {
+                        roomStatus.innerHTML += `<br><small>${statusText}</small>`;
+                    }
+                }
             } else {
                 roomStatus.innerHTML = `<i class="fas fa-times-circle"></i> Комната не найдена`;
                 roomStatus.className = 'room-status not-found';
@@ -578,44 +600,139 @@ class Game {
         });
     }
 
-    handleDiceRolled(data) {
-        this.diceResult = data.dice;
-        const diceElement = document.getElementById('dice');
-        if (diceElement) {
-            diceElement.textContent = data.dice;
-            diceElement.classList.add('rolling');
+    async initVideo() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 320 },
+                    height: { ideal: 240 },
+                    facingMode: "user"
+                },
+                audio: false
+            });
             
-            setTimeout(() => {
-                diceElement.classList.remove('rolling');
-            }, 500);
+            const videoElement = document.createElement('video');
+            videoElement.autoplay = true;
+            videoElement.muted = true;
+            videoElement.playsInline = true;
+            videoElement.srcObject = stream;
+            
+            const roleMap = {
+                'master': 'video-master',
+                'player1': 'video-team1',
+                'player2': 'video-team2'
+            };
+            
+            const containerId = roleMap[this.role];
+            if (containerId) {
+                const container = document.getElementById(containerId);
+                if (container) {
+                    const placeholder = container.querySelector('.video-placeholder');
+                    if (placeholder) {
+                        const icon = placeholder.querySelector('i');
+                        if (icon) icon.style.display = 'none';
+                        
+                        const text = placeholder.querySelector('p');
+                        if (text) {
+                            text.innerHTML = this.role === 'master' 
+                                ? `<i class="fas fa-crown"></i> ${this.playerName} (Ведущий)`
+                                : `<i class="fas fa-user"></i> ${this.playerName} (Команда ${this.role === 'player1' ? '1' : '2'})`;
+                        }
+                        
+                        videoElement.style.width = '100%';
+                        videoElement.style.height = '100%';
+                        videoElement.style.objectFit = 'cover';
+                        videoElement.style.borderRadius = '10px';
+                        placeholder.appendChild(videoElement);
+                    }
+                }
+            }
+
+        } catch (error) {
+            console.log('Камера недоступна:', error);
+            this.createDemoVideos();
         }
-        
-        const taskNames = {
-            1: 'Кухня', 2: 'Бар', 3: 'Знания', 
-            4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+    }
+
+    updateVideoPlaceholders(players) {
+        if (players.master && this.role !== 'master') {
+            const masterPlaceholder = document.querySelector('#video-master .video-placeholder p');
+            if (masterPlaceholder) {
+                masterPlaceholder.innerHTML = `<i class="fas fa-crown"></i> ${players.master}`;
+            }
+        }
+
+        if (players.player1 && this.role !== 'player1') {
+            const player1Placeholder = document.querySelector('#video-team1 .video-placeholder p');
+            if (player1Placeholder) {
+                player1Placeholder.innerHTML = `<i class="fas fa-user"></i> ${players.player1}`;
+            }
+        }
+
+        if (players.player2 && this.role !== 'player2') {
+            const player2Placeholder = document.querySelector('#video-team2 .video-placeholder p');
+            if (player2Placeholder) {
+                player2Placeholder.innerHTML = `<i class="fas fa-user"></i> ${players.player2}`;
+            }
+        }
+    }
+
+    createDemoVideos() {
+        const demoColors = {
+            'master': '#FF9800',
+            'player1': '#2196F3',
+            'player2': '#FF5722'
         };
         
-        const taskTypeElement = document.getElementById('task-type');
-        if (taskTypeElement) {
-            taskTypeElement.textContent = taskNames[data.dice];
-        }
+        Object.entries(demoColors).forEach(([role, color]) => {
+            if (role !== this.role) {
+                const roleMap = {
+                    'master': 'video-master',
+                    'player1': 'video-team1',
+                    'player2': 'video-team2'
+                };
+                
+                const containerId = roleMap[role];
+                if (containerId) {
+                    const container = document.getElementById(containerId);
+                    if (container) {
+                        const placeholder = container.querySelector('.video-placeholder');
+                        if (placeholder) {
+                            placeholder.style.background = `linear-gradient(135deg, ${color} 0%, ${this.darkenColor(color, 30)} 100%)`;
+                            
+                            const icon = placeholder.querySelector('i');
+                            if (icon) {
+                                icon.style.display = 'block';
+                                icon.style.color = 'white';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    darkenColor(color, percent) {
+        const num = parseInt(color.replace("#", ""), 16);
+        const amt = Math.round(2.55 * percent);
+        const R = (num >> 16) - amt;
+        const G = (num >> 8 & 0x00FF) - amt;
+        const B = (num & 0x0000FF) - amt;
         
-        // Показываем карточку только если:
-        // 1. Это текущий игрок (который должен отвечать)
-        // 2. Это ведущий (чтобы видеть вопрос)
-        // 3. Это локальная игра (всем)
-        
-        const shouldShowCard = this.gameMode === 'local' || 
-                              this.role === 'master' || 
-                              (this.role === 'player1' && this.currentPlayer === 1) ||
-                              (this.role === 'player2' && this.currentPlayer === 2);
-        
-        if (shouldShowCard) {
-            setTimeout(() => this.drawCard(data.dice), 800);
-        }
-        
-        if (this.gameMode === 'online') {
-            this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
+        return "#" + (
+            0x1000000 +
+            (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
+            (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
+            (B < 255 ? B < 1 ? 0 : B : 255)
+        ).toString(16).slice(1);
+    }
+
+    getRoleNameFromType(roleType) {
+        switch(roleType) {
+            case 'master': return 'Ведущий';
+            case 'player1': return 'Игрок 1';
+            case 'player2': return 'Игрок 2';
+            default: return 'Игрок';
         }
     }
 
@@ -671,6 +788,422 @@ class Game {
         }
     }
 
+    createBoard() {
+        const container = document.getElementById('cells-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        const positions = this.generateBoardPositions();
+        
+        for (let i = 0; i <= 40; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.id = `cell-${i}`;
+            cell.dataset.number = `Клетка ${i}`;
+            
+            if (i === 0) {
+                cell.textContent = 'СТАРТ';
+            } else if (i === 40) {
+                cell.textContent = 'ФИНИШ';
+                cell.classList.add('finish', 'finish-big');
+            } else {
+                cell.textContent = i;
+            }
+            
+            if (i === 0) {
+                cell.classList.add('start');
+            } else if (i === 40) {
+                // Уже добавили классы выше
+            } else if (i >= 11 && i <= 14) {
+                cell.classList.add('grams');
+            } else if (i >= 19 && i <= 22) {
+                cell.classList.add('description');
+            } else if (i >= 33 && i <= 36) {
+                cell.classList.add('allergy');
+            } else if ((i >= 26 && i <= 32) || (i >= 37 && i <= 39)) {
+                cell.classList.add('red');
+            } else {
+                cell.classList.add('normal');
+            }
+            
+            if (positions[i]) {
+                cell.style.left = positions[i].x + 'px';
+                cell.style.top = positions[i].y + 'px';
+            }
+            
+            container.appendChild(cell);
+        }
+
+        this.updatePieces();
+    }
+
+    createZoneLabels() {
+        const container = document.getElementById('cells-container');
+        if (!container) return;
+        
+        // Надпись для зоны граммовки
+        const gramsLabel = document.createElement('div');
+        gramsLabel.className = 'zone-label';
+        gramsLabel.style.cssText = `
+            position: absolute;
+            color: #4CAF50;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 5;
+            transform: rotate(-90deg);
+            transform-origin: left top;
+            white-space: nowrap;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 8px;
+            border-radius: 3px;
+            letter-spacing: normal;
+            font-family: Arial, sans-serif;
+        `;
+        gramsLabel.textContent = 'Зона граммовки ±2';
+        gramsLabel.style.left = '140px';
+        gramsLabel.style.top = '490px';
+        container.appendChild(gramsLabel);
+        
+        // Надпись для зоны красочного описания
+        const descLabel = document.createElement('div');
+        descLabel.className = 'zone-label';
+        descLabel.style.cssText = `
+            position: absolute;
+            color: #9C27B0;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 5;
+            white-space: nowrap;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 8px;
+            border-radius: 3px;
+            border: 1px solid rgba(156, 39, 176, 0.5);
+            letter-spacing: normal;
+            font-family: Arial, sans-serif;
+        `;
+        descLabel.textContent = 'Зона красочного описания +1/-3';
+        descLabel.style.left = '220px';
+        descLabel.style.top = '30px';
+        container.appendChild(descLabel);
+        
+        // Надпись для зоны аллергии
+        const allergyLabel = document.createElement('div');
+        allergyLabel.className = 'zone-label';
+        allergyLabel.style.cssText = `
+            position: absolute;
+            color: #E91E63;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 5;
+            white-space: nowrap;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 2px 8px;
+            border-radius: 3px;
+            border: 1px solid rgba(233, 30, 99, 0.5);
+            letter-spacing: normal;
+            font-family: Arial, sans-serif;
+        `;
+        allergyLabel.textContent = 'Зона аллергии +1/-5';
+        allergyLabel.style.left = '620px';
+        allergyLabel.style.top = '420px';
+        container.appendChild(allergyLabel);
+    }
+
+    generateBoardPositions() {
+        const positions = [];
+        
+        // Оригинальные позиции клеток
+        positions[0] = { x: 300, y: 200 };
+        positions[1] = { x: 380, y: 200 };
+        positions[2] = { x: 460, y: 200 };
+        positions[3] = { x: 540, y: 200 };
+        positions[4] = { x: 540, y: 270 };
+        positions[5] = { x: 540, y: 340 };
+        positions[6] = { x: 520, y: 400 };
+        positions[7] = { x: 480, y: 460 };
+        positions[8] = { x: 420, y: 480 };
+        positions[9] = { x: 350, y: 480 };
+        positions[10] = { x: 280, y: 480 };
+        positions[11] = { x: 220, y: 460 };
+        positions[12] = { x: 170, y: 400 };
+        positions[13] = { x: 150, y: 330 };
+        positions[14] = { x: 150, y: 260 };
+        positions[15] = { x: 150, y: 190 };
+        positions[16] = { x: 150, y: 120 };
+        positions[17] = { x: 155, y: 50 };
+        positions[18] = { x: 190, y: 5 };
+        positions[19] = { x: 240, y: -30 };
+        positions[20] = { x: 300, y: -50 };
+        positions[21] = { x: 360, y: -50 };
+        positions[22] = { x: 420, y: -50 };
+        positions[23] = { x: 475, y: -30 };
+        positions[24] = { x: 510, y: 15 };
+        positions[25] = { x: 540, y: 70 };
+        
+        // Круговая часть
+        const circleCenterX = 800;
+        const circleCenterY = 180;
+        const circleRadius = 160;
+        
+        const totalSteps = 14;
+        const totalAngle = 360;
+        const angleStep = totalAngle / totalSteps;
+        
+        positions[26] = {
+            x: circleCenterX + circleRadius * Math.cos(-120 * Math.PI / 180),
+            y: circleCenterY + circleRadius * Math.sin(-120 * Math.PI / 180)
+        };
+
+        for (let i = 27; i <= 39; i++) {
+            const step = i - 26;
+            const angle = -120 + (step * angleStep);
+            const angleRad = angle * Math.PI / 180;
+            
+            positions[i] = {
+                x: circleCenterX + circleRadius * Math.cos(angleRad),
+                y: circleCenterY + circleRadius * Math.sin(angleRad)
+            };
+        }
+
+        // Финиш
+        positions[40] = { x: 790, y: 170 };
+
+        // Масштабирование и смещение
+        const scale = 0.7;
+        const offsetX = 50;
+        const offsetY = 100;
+
+        for (let i = 0; i <= 40; i++) {
+            if (positions[i]) {
+                positions[i].x = positions[i].x * scale + offsetX;
+                positions[i].y = positions[i].y * scale + offsetY;
+            }
+        }
+
+        return positions;
+    }
+
+    drawBoard() {
+        const canvas = document.getElementById('board-canvas');
+        if (!canvas) return;
+        
+        const parent = canvas.parentElement;
+        if (!parent) return;
+        
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const positions = this.generateBoardPositions();
+        
+        // Рисуем линии между клетками
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+
+        // Основная траектория
+        ctx.beginPath();
+        for (let i = 0; i < 26; i++) {
+            if (positions[i] && positions[i + 1]) {
+                if (i === 0) {
+                    ctx.moveTo(positions[i].x + 20, positions[i].y + 20);
+                }
+                ctx.lineTo(positions[i + 1].x + 20, positions[i + 1].y + 20);
+            }
+        }
+        ctx.stroke();
+        
+        // Линия от 25 к 26
+        if (positions[25] && positions[26]) {
+            ctx.beginPath();
+            ctx.moveTo(positions[25].x + 20, positions[25].y + 20);
+            ctx.lineTo(positions[26].x + 20, positions[26].y + 20);
+            ctx.stroke();
+        }
+        
+        // Круг
+        ctx.beginPath();
+        if (positions[26]) {
+            ctx.moveTo(positions[26].x + 20, positions[26].y + 20);
+        }
+        
+        for (let i = 26; i < 39; i++) {
+            if (positions[i] && positions[i + 1]) {
+                ctx.lineTo(positions[i + 1].x + 20, positions[i + 1].y + 20);
+            }
+        }
+        ctx.stroke();
+        
+        // Линия от 39 к 40
+        if (positions[39] && positions[40]) {
+            ctx.beginPath();
+            ctx.moveTo(positions[39].x + 20, positions[39].y + 20);
+            ctx.lineTo(positions[40].x + 20, positions[40].y + 20);
+            ctx.stroke();
+        }
+        
+        console.log('✅ Игровое поле отрисовано');
+    }
+
+    setupEventListeners() {
+        console.log('🔧 Настройка обработчиков событий...');
+
+        // Кнопка броска кубика
+        const rollDiceBtn = document.getElementById('roll-dice');
+        if (rollDiceBtn) {
+            rollDiceBtn.addEventListener('click', () => this.rollDice());
+            console.log('✅ Обработчик для броска кубика установлен');
+        }
+        
+        // Кнопка "Завершить ответ"
+        const answerBtn = document.getElementById('answer-received');
+        if (answerBtn) {
+            answerBtn.textContent = 'Завершить ответ';
+            answerBtn.addEventListener('click', () => this.stopTimerAndCloseCard());
+        }
+        
+        // Кнопки очков (только для ведущего)
+        document.querySelectorAll('.point-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if (this.role !== 'master') return;
+                if (this.pointsApplied || this.applyButtonClicked) return;
+
+                const points = parseInt(e.target.dataset.points);
+                const team = parseInt(e.target.dataset.team);
+                this.selectPoints(team, points);
+            });
+        });
+        
+        // Кнопка применения очков
+        const applyBtn = document.getElementById('apply-points');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => this.applySelectedPoints());
+        }
+        
+        // Кнопка следующего хода
+        const nextTurnBtn = document.getElementById('next-turn');
+        if (nextTurnBtn) {
+            nextTurnBtn.addEventListener('click', () => this.nextTurn());
+        }
+        
+        // Обработчик изменения размера окна
+        window.addEventListener('resize', () => this.drawBoard());
+        
+        // Кнопка отправки сообщения в чат
+        const sendMessageBtn = document.getElementById('send-message-btn');
+        const chatInput = document.getElementById('chat-input');
+        
+        if (sendMessageBtn && chatInput) {
+            sendMessageBtn.addEventListener('click', () => this.sendChatMessage());
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    this.sendChatMessage();
+                }
+            });
+        }
+
+        // Пинг серверу каждые 30 секунд для поддержания соединения
+        if (this.gameMode === 'online') {
+            setInterval(() => {
+                if (this.socket && this.socket.connected) {
+                    this.socket.emit('ping');
+                }
+            }, 30000);
+        }
+        
+        console.log('✅ Все обработчики событий установлены');
+    }
+
+    setupChat() {
+        // Создаем контейнер для чата только в онлайн-режиме
+        if (this.gameMode !== 'online') return;
+        
+        if (!document.getElementById('chat-container')) {
+            const chatContainer = document.createElement('div');
+            chatContainer.id = 'chat-container';
+            chatContainer.className = 'chat-container';
+            chatContainer.innerHTML = `
+                <div class="chat-header">
+                    <h4><i class="fas fa-comments"></i> Чат игры</h4>
+                    <button id="toggle-chat" class="chat-toggle">
+                        <i class="fas fa-chevron-up"></i>
+                    </button>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-system-message">
+                        <i class="fas fa-info-circle"></i> Чат подключен
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chat-input" placeholder="Введите сообщение..." maxlength="200">
+                    <button id="send-message-btn" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            `;
+            
+            const gameContainer = document.querySelector('.game-container');
+            if (gameContainer) {
+                gameContainer.appendChild(chatContainer);
+            }
+            
+            const toggleBtn = document.getElementById('toggle-chat');
+            const chatMessages = document.getElementById('chat-messages');
+            
+            if (toggleBtn && chatMessages) {
+                toggleBtn.addEventListener('click', () => {
+                    const isHidden = chatMessages.style.display === 'none';
+                    chatMessages.style.display = isHidden ? 'block' : 'none';
+                    toggleBtn.innerHTML = isHidden ? 
+                        '<i class="fas fa-chevron-up"></i>' : 
+                        '<i class="fas fa-chevron-down"></i>';
+                });
+            }
+        }
+    }
+
+    sendChatMessage() {
+        if (this.gameMode !== 'online') return;
+        
+        const chatInput = document.getElementById('chat-input');
+        if (!chatInput || !this.socket || !this.isConnected) return;
+        
+        const message = chatInput.value.trim();
+        if (!message) return;
+        
+        this.socket.emit('send-message', message);
+        chatInput.value = '';
+        chatInput.focus();
+    }
+
+    addChatMessage(sender, message, timestamp) {
+        if (this.gameMode !== 'online') return;
+        
+        const chatMessages = document.getElementById('chat-messages');
+        if (!chatMessages) return;
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${sender === this.playerName ? 'own-message' : ''}`;
+        
+        const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        messageDiv.innerHTML = `
+            <div class="message-header">
+                <span class="message-sender">${sender === this.playerName ? 'Вы' : sender}</span>
+                <span class="message-time">${time}</span>
+            </div>
+            <div class="message-text">${message}</div>
+        `;
+        
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
     drawCard(type) {
         const cards = this.cards[type];
         if (!cards || cards.length === 0) return;
@@ -710,6 +1243,31 @@ class Game {
         }, 1000);
     }
 
+    getCategoryName(type) {
+        const names = {
+            1: 'Кухня', 2: 'Бар', 3: 'Знания',
+            4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
+        };
+        return names[type] || 'Неизвестная категория';
+    }
+
+    startTimer() {
+        clearInterval(this.timerInterval);
+        this.timer = 60;
+
+        const timerElement = document.getElementById('timer');
+        if (timerElement) timerElement.textContent = this.timer;
+
+        this.timerInterval = setInterval(() => {
+            this.timer--;
+            if (timerElement) timerElement.textContent = this.timer;
+            
+            if (this.timer <= 0) {
+                this.stopTimerAndCloseCard();
+            }
+        }, 1000);
+    }
+
     stopTimerAndCloseCard() {
         clearInterval(this.timerInterval);
         this.hideCard();
@@ -730,6 +1288,80 @@ class Game {
             // В локальном режиме сразу показываем панель ведущего
             this.showMasterPanel();
         }
+    }
+
+    hideCard() {
+        const modal = document.getElementById('card-modal');
+        if (!modal) return;
+        
+        const cardContent = modal.querySelector('.card-content');
+        if (cardContent) cardContent.classList.remove('flipped');
+
+        setTimeout(() => {
+            modal.classList.remove('active');
+        }, 500);
+    }
+
+    showMasterPanel() {
+        this.resetSelection();
+        const panel = document.getElementById('master-panel');
+        if (panel) {
+            panel.style.display = 'block';
+        }
+        this.showNotification('Оцените ответ команд и примените очки', 'info');
+    }
+
+    resetSelection() {
+        this.selectedPoints = { 1: 0, 2: 0 };
+        this.pointsApplied = false;
+        this.applyButtonClicked = false;
+        
+        this.updateSelectionDisplay(1);
+        this.updateSelectionDisplay(2);
+
+        // Разблокируем кнопки (только для ведущего)
+        if (this.role === 'master') {
+            document.querySelectorAll('.point-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                btn.disabled = false;
+            });
+            
+            const applyBtn = document.getElementById('apply-points');
+            if (applyBtn) {
+                applyBtn.disabled = false;
+                applyBtn.style.opacity = '1';
+            }
+        }
+
+        const nextTurnBtn = document.getElementById('next-turn');
+        if (nextTurnBtn) nextTurnBtn.disabled = true;
+    }
+
+    updateSelectionDisplay(team) {
+        const element = document.getElementById(`team${team}-selection`);
+        if (!element) return;
+        
+        const points = this.selectedPoints[team];
+        element.innerHTML = points === 0 
+            ? 'Выбрано: <span>0 очков</span>'
+            : `Выбрано: <span>${points > 0 ? '+' : ''}${points} очков</span>`;
+    }
+
+    selectPoints(team, points) {
+        if (this.role !== 'master') return;
+        
+        document.querySelectorAll(`.point-btn[data-team="${team}"]`).forEach(btn => {
+            btn.classList.remove('selected');
+        });
+        
+        if (this.selectedPoints[team] === points) {
+            this.selectedPoints[team] = 0;
+        } else {
+            this.selectedPoints[team] = points;
+            document.querySelector(`.point-btn[data-team="${team}"][data-points="${points}"]`)?.classList.add('selected');
+        }
+        
+        this.updateSelectionDisplay(team);
     }
 
     rollDice() {
@@ -904,6 +1536,256 @@ class Game {
         }
     }
 
+    movePiece(team, points) {
+        const piece = document.getElementById(`piece${team}`);
+        if (!piece) return;
+        
+        const newPosition = Math.max(0, Math.min(this.positions[team] + points, 40));
+        
+        this.animatePieceMovement(team, this.positions[team], newPosition, () => {
+            this.positions[team] = newPosition;
+            
+            if (Math.abs(points) <= 6) {
+                this.checkSpecialZone(team, newPosition);
+            }
+        });
+    }
+
+    animatePieceMovement(team, fromPosition, toPosition, callback) {
+        const piece = document.getElementById(`piece${team}`);
+        if (!piece) return;
+        
+        const positions = this.generateBoardPositions();
+        const stepDelay = 300;
+        const direction = toPosition > fromPosition ? 1 : -1;
+        let currentStep = fromPosition + direction;
+        
+        const moveStep = () => {
+            if ((direction > 0 && currentStep <= toPosition) || 
+                (direction < 0 && currentStep >= toPosition)) {
+                
+                if (positions[currentStep]) {
+                    piece.style.left = (positions[currentStep].x + 5) + 'px';
+                    piece.style.top = (positions[currentStep].y + 5) + 'px';
+                    piece.classList.add('moving');
+                    
+                    setTimeout(() => {
+                        piece.classList.remove('moving');
+                    }, 200);
+                }
+                
+                currentStep += direction;
+                setTimeout(moveStep, stepDelay);
+            } else if (callback) {
+                callback();
+            }
+        };
+        
+        moveStep();
+    }
+
+    checkSpecialZone(team, position) {
+        const cell = document.getElementById(`cell-${position}`);
+        if (!cell) return;
+        
+        let zoneType = null;
+        
+        if (cell.classList.contains('grams')) {
+            zoneType = 'grams';
+        } else if (cell.classList.contains('description')) {
+            zoneType = 'description';
+        } else if (cell.classList.contains('allergy')) {
+            zoneType = 'allergy';
+        }
+
+        if (zoneType && !this.triggeredZonesInTurn[team].has(zoneType)) {
+            this.triggeredZonesInTurn[team].add(zoneType);
+            
+            this.specialZoneQueue.push({
+                team: team,
+                zoneType: zoneType,
+                position: position,
+                priority: team === this.currentPlayer ? 1 : 2
+            });
+            
+            this.specialZoneQueue.sort((a, b) => a.priority - b.priority);
+
+            if (!this.showingSpecialZone) {
+                this.showNextSpecialZone();
+            }
+        }
+    }
+
+    showNextSpecialZone() {
+        if (this.specialZoneQueue.length === 0) {
+            this.showingSpecialZone = false;
+            return;
+        }
+        
+        this.showingSpecialZone = true;
+        const task = this.specialZoneQueue.shift();
+        const zoneSettings = this.zoneSettings[task.zoneType];
+        
+        const modal = document.createElement('div');
+        modal.className = 'special-zone-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            color: #333;
+            z-index: 1001;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border: 5px solid ${this.getZoneColor(task.zoneType)};
+        `;
+        
+        modal.innerHTML = `
+            <h3 style="color: ${this.getZoneColor(task.zoneType)}; margin-bottom: 20px; text-align: center;">
+                ${zoneSettings.name}
+            </h3>
+            <p style="font-size: 18px; margin-bottom: 15px; text-align: center;">
+                Вопрос для команды ${task.team}
+            </p>
+            <div style="font-size: 16px; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 10px;">
+                ${zoneSettings.question}
+            </div>
+            <div style="text-align: center; margin-top: 30px;">
+                <button id="special-correct" class="btn" style="background: #4CAF50; margin-right: 20px;">
+                    Верно (+${zoneSettings.positive})
+                </button>
+                <button id="special-incorrect" class="btn" style="background: #f44336;">
+                    Неверно (${zoneSettings.negative})
+                </button>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        modal.querySelector('#special-correct').addEventListener('click', () => {
+            this.movePiece(task.team, zoneSettings.positive);
+            modal.remove();
+            setTimeout(() => this.showNextSpecialZone(), 500);
+        });
+
+        modal.querySelector('#special-incorrect').addEventListener('click', () => {
+            this.movePiece(task.team, zoneSettings.negative);
+            modal.remove();
+            setTimeout(() => this.showNextSpecialZone(), 500);
+        });
+    }
+
+    getZoneColor(zoneType) {
+        switch(zoneType) {
+            case 'grams': return '#4CAF50';
+            case 'description': return '#9C27B0';
+            case 'allergy': return '#E91E63';
+            default: return '#4CAF50';
+        }
+    }
+
+    updatePieces() {
+        const positions = this.generateBoardPositions();
+
+        for (let team of [1, 2]) {
+            const piece = document.getElementById(`piece${team}`);
+            if (!piece) continue;
+
+            const position = this.positions[team];
+            if (positions[position]) {
+                piece.style.left = (positions[position].x + 5) + 'px';
+                piece.style.top = (positions[position].y + 5) + 'px';
+            }
+        }
+    }
+
+    updateScores() {
+        const team1Score = document.querySelector('#team1-score .score');
+        const team2Score = document.querySelector('#team2-score .score');
+        
+        if (team1Score) team1Score.textContent = this.scores[1];
+        if (team2Score) team2Score.textContent = this.scores[2];
+    }
+
+    updateTurnIndicator() {
+        document.querySelectorAll('.video-box').forEach(box => {
+            box.classList.remove('current-turn');
+        });
+        
+        document.querySelectorAll('.team-score').forEach(score => {
+            score.classList.remove('current-turn');
+        });
+
+        document.querySelectorAll('.current-turn-indicator').forEach(indicator => {
+            indicator.style.display = 'none';
+        });
+
+        const currentTeam = this.currentPlayer;
+        const videoTeam = document.getElementById(`video-team${currentTeam}`);
+        const teamScore = document.getElementById(`team${currentTeam}-score`);
+        const turnIndicator = document.getElementById(`turn-indicator-${currentTeam}`);
+
+        if (videoTeam) videoTeam.classList.add('current-turn');
+        if (teamScore) teamScore.classList.add('current-turn');
+        if (turnIndicator) turnIndicator.style.display = 'block';
+    }
+
+    setupRoleInterface() {
+        const isMaster = this.role === 'master';
+
+        // Панель ведущего
+        const panel = document.getElementById('master-panel');
+        if (panel) {
+            panel.style.display = isMaster ? 'block' : 'none';
+        }
+
+        // Колоды карт
+        document.querySelectorAll('.deck').forEach(deck => {
+            deck.style.cursor = 'default';
+            deck.style.pointerEvents = 'none';
+        });
+
+        this.updateRollButton();
+
+        // Показываем информацию о подключении (только в онлайн-режиме)
+        if (this.gameMode === 'online') {
+            const connectionInfo = document.createElement('div');
+            connectionInfo.className = 'connection-info-bar';
+            connectionInfo.innerHTML = `
+                <div class="connection-status ${this.isConnected ? 'connected' : 'disconnected'}">
+                    <i class="fas fa-circle"></i>
+                    <span>${this.isConnected ? 'Подключено' : 'Не подключено'}</span>
+                </div>
+                <div class="room-info-bar">
+                    <i class="fas fa-door-closed"></i>
+                    <span>Комната: ${this.roomCode || 'Нет'}</span>
+                </div>
+                <div class="player-info-bar">
+                    <i class="fas fa-user"></i>
+                    <span>${this.playerName} (${this.getRoleName()})</span>
+                </div>
+            `;
+
+            const topPanel = document.querySelector('.top-panel');
+            if (topPanel) {
+                topPanel.appendChild(connectionInfo);
+            }
+        }
+    }
+
+    getRoleName() {
+        switch(this.role) {
+            case 'master': return 'Ведущий';
+            case 'player1': return 'Игрок 1 (Команда 1)';
+            case 'player2': return 'Игрок 2 (Команда 2)';
+            case 'local': return 'Локальный игрок';
+            default: return 'Наблюдатель';
+        }
+    }
+
     nextTurn() {
         if (this.gameMode === 'online' && this.role !== 'master') {
             alert('Только ведущий может переходить к следующему ходу!');
@@ -944,155 +1826,114 @@ class Game {
         this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
     }
 
-    setupEventListeners() {
-        console.log('🔧 Настройка обработчиков событий...');
+    showWinner(team) {
+        const fireworks = document.getElementById('fireworks');
+        if (fireworks) fireworks.style.display = 'block';
         
-        const rollDiceBtn = document.getElementById('roll-dice');
-        if (rollDiceBtn) {
-            rollDiceBtn.addEventListener('click', () => this.rollDice());
-        }
-        
-        const answerBtn = document.getElementById('answer-received');
-        if (answerBtn) {
-            // Текст устанавливается в drawCard
-        }
-        
-        document.querySelectorAll('.point-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                if (this.pointsApplied || this.applyButtonClicked) return;
+        for (let i = 0; i < 30; i++) {
+            setTimeout(() => {
+                const firework = document.createElement('div');
+                firework.style.position = 'fixed';
+                firework.style.left = Math.random() * 100 + 'vw';
+                firework.style.top = Math.random() * 100 + 'vh';
+                firework.style.width = '5px';
+                firework.style.height = '5px';
+                firework.style.background = team === 1 ? '#2196F3' : '#FF5722';
+                firework.style.borderRadius = '50%';
+                firework.style.animation = 'firework 1s forwards';
                 
-                const points = parseInt(e.target.dataset.points);
-                const team = parseInt(e.target.dataset.team);
-                this.selectPoints(team, points);
-            });
-        });
-        
-        const applyBtn = document.getElementById('apply-points');
-        if (applyBtn) {
-            applyBtn.addEventListener('click', () => this.applySelectedPoints());
+                if (fireworks) fireworks.appendChild(firework);
+                
+                setTimeout(() => firework.remove(), 1000);
+            }, i * 100);
         }
         
-        const nextTurnBtn = document.getElementById('next-turn');
-        if (nextTurnBtn) {
-            nextTurnBtn.addEventListener('click', () => this.nextTurn());
-        }
-        
-        window.addEventListener('resize', () => this.drawBoard());
-        
-        // Чат (только в онлайн-режиме)
-        if (this.gameMode === 'online') {
-            const sendMessageBtn = document.getElementById('send-message-btn');
-            const chatInput = document.getElementById('chat-input');
-            
-            if (sendMessageBtn && chatInput) {
-                sendMessageBtn.addEventListener('click', () => this.sendChatMessage());
-                chatInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        this.sendChatMessage();
-                    }
-                });
-            }
-        }
-        
-        // Пинг серверу для поддержания соединения
-        if (this.gameMode === 'online') {
-            setInterval(() => {
-                if (this.socket && this.socket.connected) {
-                    this.socket.emit('ping');
-                }
-            }, 30000);
-        }
-    }
-
-    setupChat() {
-        // Создаем контейнер для чата только в онлайн-режиме
-        if (this.gameMode !== 'online') return;
-        
-        if (!document.getElementById('chat-container')) {
-            const chatContainer = document.createElement('div');
-            chatContainer.id = 'chat-container';
-            chatContainer.className = 'chat-container';
-            chatContainer.innerHTML = `
-                <div class="chat-header">
-                    <h4><i class="fas fa-comments"></i> Чат игры</h4>
-                    <button id="toggle-chat" class="chat-toggle">
-                        <i class="fas fa-chevron-up"></i>
-                    </button>
-                </div>
-                <div class="chat-messages" id="chat-messages">
-                    <div class="chat-system-message">
-                        <i class="fas fa-info-circle"></i> Чат подключен
-                    </div>
-                </div>
-                <div class="chat-input">
-                    <input type="text" id="chat-input" placeholder="Введите сообщение..." maxlength="200">
-                    <button id="send-message-btn" class="send-btn">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </div>
-            `;
-            
-            const gameContainer = document.querySelector('.game-container');
-            if (gameContainer) {
-                gameContainer.appendChild(chatContainer);
+        setTimeout(() => {
+            alert(`🎉 Победила Команда ${team}! 🎉`);
+            if (fireworks) {
+                fireworks.style.display = 'none';
+                fireworks.innerHTML = '';
             }
             
-            const toggleBtn = document.getElementById('toggle-chat');
-            const chatMessages = document.getElementById('chat-messages');
-            
-            if (toggleBtn && chatMessages) {
-                toggleBtn.addEventListener('click', () => {
-                    const isHidden = chatMessages.style.display === 'none';
-                    chatMessages.style.display = isHidden ? 'block' : 'none';
-                    toggleBtn.innerHTML = isHidden ? 
-                        '<i class="fas fa-chevron-up"></i>' : 
-                        '<i class="fas fa-chevron-down"></i>';
-                });
+            // Отправляем уведомление в чат (в онлайн-режиме)
+            if (this.gameMode === 'online') {
+                this.addChatMessage('Система', `🎉 Победила Команда ${team}! Поздравляем!`, new Date().toLocaleTimeString());
             }
-        }
+        }, 3000);
     }
 
-    sendChatMessage() {
-        if (this.gameMode !== 'online') return;
-        
-        const chatInput = document.getElementById('chat-input');
-        if (!chatInput || !this.socket || !this.isConnected) return;
-        
-        const message = chatInput.value.trim();
-        if (!message) return;
-        
-        this.socket.emit('send-message', message);
-        chatInput.value = '';
-        chatInput.focus();
-    }
-
-    addChatMessage(sender, message, timestamp) {
-        if (this.gameMode !== 'online') return;
-        
-        const chatMessages = document.getElementById('chat-messages');
-        if (!chatMessages) return;
-        
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `chat-message ${sender === this.playerName ? 'own-message' : ''}`;
-        
-        const time = timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-        messageDiv.innerHTML = `
-            <div class="message-header">
-                <span class="message-sender">${sender === this.playerName ? 'Вы' : sender}</span>
-                <span class="message-time">${time}</span>
-            </div>
-            <div class="message-text">${message}</div>
+    showAlert(message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert';
+        alertDiv.innerHTML = `
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>${message}</span>
+            <button class="close-alert">&times;</button>
         `;
         
-        chatMessages.appendChild(messageDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        alertDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #f44336;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            z-index: 10001;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideDown 0.3s ease-out;
+        `;
+        
+        document.body.appendChild(alertDiv);
+        
+        alertDiv.querySelector('.close-alert').addEventListener('click', () => {
+            alertDiv.remove();
+        });
+        
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.style.animation = 'slideUp 0.3s ease-out';
+                setTimeout(() => alertDiv.remove(), 300);
+            }
+        }, 5000);
     }
 
-    // Остальные методы остаются без изменений (createBoard, generateBoardPositions, drawBoard, и т.д.)
-    // Добавьте их из предыдущей версии кода...
-
-    // ... (все остальные методы из предыдущей версии остаются без изменений)
+    showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.innerHTML = `
+            <i class="fas ${type === 'error' ? 'fa-exclamation-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle'}"></i>
+            <span>${message}</span>
+        `;
+        
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'error' ? '#f44336' : type === 'warning' ? '#FF9800' : '#2196F3'};
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            z-index: 10000;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease-out;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 300px;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
 }
 
 // Запускаем игру
