@@ -494,6 +494,7 @@ class Game {
         });
         
         this.socket.on('dice-rolled', (data) => {
+            console.log('🎲 Получен результат броска:', data);
             this.diceResult = data.dice;
             const diceElement = document.getElementById('dice');
             if (diceElement) {
@@ -519,12 +520,15 @@ class Game {
             this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
         });
         
+        // ВАЖНО: Обработчик для получения вопросов от сервера
         this.socket.on('question-show', (data) => {
+            console.log('📋 Получен вопрос от сервера:', data);
             // Все участники получают одинаковый вопрос
             this.showQuestion(data.question, data.category, data.instruction);
         });
         
         this.socket.on('game-updated', (gameState) => {
+            console.log('🔄 Обновление состояния игры:', gameState);
             this.scores = gameState.scores || this.scores;
             this.positions = gameState.positions || this.positions;
             this.currentPlayer = gameState.currentPlayer || this.currentPlayer;
@@ -541,6 +545,7 @@ class Game {
         });
         
         this.socket.on('turn-changed', (data) => {
+            console.log('🔄 Смена хода:', data);
             this.currentPlayer = data.currentPlayer;
             this.diceRolledInCurrentTurn = false;
             this.updateTurnIndicator();
@@ -1130,6 +1135,7 @@ class Game {
                 return;
             }
             
+            console.log('📤 Отправляем запрос на бросок кубика на сервер');
             this.socket.emit('roll-dice');
             this.diceRolledInCurrentTurn = true;
             
@@ -1169,38 +1175,36 @@ class Game {
     }
 
     drawCard(type) {
+        console.log('🃏 Рисуем карточку для категории:', type);
         const cards = this.cards[type];
         if (!cards || cards.length === 0) return;
         
         // Выбираем случайный вопрос
         const randomCard = cards[Math.floor(Math.random() * cards.length)];
         
-        // Сохраняем текущий вопрос для синхронизации
-        this.currentQuestion = randomCard;
-        this.currentQuestionCategory = type;
+        console.log('✅ Выбран вопрос:', randomCard);
         
-        // В онлайн-режиме отправляем вопрос всем участникам
-        if (this.gameMode === 'online' && this.socket && this.isConnected && this.role === 'master') {
-            this.socket.emit('question-selected', {
-                question: randomCard.question,
-                category: type,
-                instruction: randomCard.instruction
-            });
-        } else if (this.gameMode === 'online' && this.socket && this.isConnected) {
-            // Если это игрок в онлайн-режиме, ждем вопроса от ведущего
-            return;
+        // В онлайн-режиме НЕ отправляем вопрос от ведущего - сервер сам отправит
+        // В локальном режиме показываем вопрос
+        if (this.gameMode === 'local') {
+            this.showQuestion(randomCard.question, type, randomCard.instruction);
         }
-        
-        // Показываем вопрос
-        this.showQuestion(randomCard.question, type, randomCard.instruction);
+        // В онлайн-режиме вопрос придет от сервера через событие 'question-show'
     }
 
     showQuestion(question, category, instruction = '') {
+        console.log('❓ Показываем вопрос:', { question, category, instruction });
         const modal = document.getElementById('card-modal');
-        if (!modal) return;
+        if (!modal) {
+            console.error('❌ Модальное окно не найдено!');
+            return;
+        }
         
         const cardContent = modal.querySelector('.card-content');
-        if (!cardContent) return;
+        if (!cardContent) {
+            console.error('❌ Контент карточки не найден!');
+            return;
+        }
         
         document.getElementById('card-dice').textContent = category;
         document.getElementById('card-category').textContent = this.getCategoryName(category);
@@ -1256,6 +1260,7 @@ class Game {
     }
 
     stopTimerAndCloseCard() {
+        console.log('⏱️ Таймер остановлен, закрываем карточку');
         clearInterval(this.timerInterval);
         this.hideCard();
         
@@ -1272,7 +1277,7 @@ class Game {
                 this.socket.emit('answer-completed');
             }
         } else {
-            // В локальном режиме сразу показываем панель ведущего
+            // В локальном режиме или у ведущего в онлайн-режиме показываем панель ведущего
             this.showMasterPanel();
         }
     }
@@ -1290,6 +1295,7 @@ class Game {
     }
 
     showMasterPanel() {
+        console.log('👑 Показываем панель ведущего');
         this.resetSelection();
         const panel = document.getElementById('master-panel');
         if (panel) {
