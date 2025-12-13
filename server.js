@@ -7,6 +7,7 @@ const fs = require('fs');
 const app = express();
 const server = http.createServer(app);
 
+// Настройка CORS для Socket.io
 const io = socketIo(server, {
   cors: {
     origin: "*",
@@ -16,7 +17,10 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
+// Раздаём статические файлы
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Middleware для парсинга JSON
 app.use(express.json());
 
 // API для проверки здоровья
@@ -131,16 +135,17 @@ function updateTimer(roomCode) {
     clearInterval(timers.get(roomCode));
     timers.delete(roomCode);
     
-    // Если отвечал игрок, уведомляем об окончании времени
-    if (room.state.waitingForAnswer && room.state.currentPlayer !== 'master') {
+    // Уведомляем всех, что время вышло
+    io.to(roomCode).emit('timer-ended');
+    
+    // Если отвечал игрок, помечаем ответ как завершенный
+    if (room.state.waitingForAnswer) {
       room.state.waitingForAnswer = false;
-      io.to(roomCode).emit('timer-ended');
-      io.to(roomCode).emit('hide-card');
       
-      // Уведомляем ведущего, что можно оценивать
+      // Уведомляем ведущего, что игрок завершил ответ (по таймеру)
       const masterSocket = io.sockets.sockets.get(room.master.id);
       if (masterSocket) {
-        masterSocket.emit('show-master-panel');
+        masterSocket.emit('answer-completed-by-player');
       }
     }
   }
@@ -526,7 +531,7 @@ io.on('connection', (socket) => {
       question: questionData.question,
       category: diceResult,
       instruction: questionData.instruction || '',
-      forPlayer: currentPlayer, // Указываем, для какого игрока вопрос
+      forPlayer: currentPlayer,
       isAnsweringPlayer: (role === 'player1' && currentPlayer === 1) || (role === 'player2' && currentPlayer === 2)
     });
 
@@ -536,7 +541,7 @@ io.on('connection', (socket) => {
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult} игроком ${playerName}`);
   });
 
-  // Игрок завершил ответ
+  // Игрок завершил ответ (нажал кнопку "Завершить ответ")
   socket.on('answer-completed', () => {
     const { roomCode, role, playerName } = socket.data;
     if (!roomCode) return;
@@ -550,19 +555,22 @@ io.on('connection', (socket) => {
     // Останавливаем таймер
     stopTimer(roomCode);
     
-    // Скрываем карточку у всех
-    io.to(roomCode).emit('hide-card');
+    // Скрываем карточку только у отвечающего игрока
+    socket.emit('hide-card');
     
-    // Показываем панель ведущего
+    // Уведомляем ведущего, что игрок завершил ответ
     const masterSocket = io.sockets.sockets.get(room.master.id);
     if (masterSocket) {
-      masterSocket.emit('show-master-panel');
+      masterSocket.emit('answer-completed-by-player');
     }
+    
+    // Уведомляем второго игрока, чтобы он тоже скрыл карточку? 
+    // Нет, второй игрок пока оставляет карточку видимой (она скроется, когда ведущий начнет оценивание)
     
     console.log(`✅ Игрок ${playerName} завершил ответ в комнате ${roomCode}`);
   });
 
-  // Ведущий начал оценивание
+  // Ведущий начал оценивание (нажал "Приступить к оцениванию")
   socket.on('start-evaluation', () => {
     const { roomCode, role } = socket.data;
     if (!roomCode || role !== 'master') return;
@@ -572,8 +580,13 @@ io.on('connection', (socket) => {
     
     room.lastActivity = Date.now();
     
-    // Скрываем карточку у всех
-    io.to(roomCode).emit('hide-card');
+    // Уведомляем всех, КРОМЕ ведущего, что нужно скрыть карточку
+    socket.to(roomCode).emit('master-started-evaluation');
+    
+    // Уведомляем самого ведущего, что он может скрыть карточку и показать панель
+    socket.emit('master-finished-evaluation');
+    
+    console.log(`👑 Ведущий начал оценивание в комнате ${roomCode}`);
   });
 
   // Обновление состояния игры
