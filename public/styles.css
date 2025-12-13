@@ -1229,3 +1229,12 @@ body {
         box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
     }
 }
+
+.evaluation-btn {
+    background: #FF9800 !important;
+    margin-top: 20px;
+}
+
+.evaluation-btn:hover:not(:disabled) {
+    background: #F57C00 !important;
+}
