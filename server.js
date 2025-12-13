@@ -61,7 +61,7 @@ app.get('/stats', (req, res) => {
 // API для редактирования вопросов
 app.get('/api/cards', (req, res) => {
   try {
-    const cardsData = fs.readFileSync(path.join(__dirname, 'cards.json'), 'utf8');
+    const cardsData = fs.readFileSync(path.join(__dirname, 'public', 'cards.json'), 'utf8');
     res.json(JSON.parse(cardsData));
   } catch (error) {
     res.status(500).json({ error: 'Не удалось загрузить вопросы' });
@@ -71,7 +71,7 @@ app.get('/api/cards', (req, res) => {
 app.post('/api/cards', (req, res) => {
   try {
     fs.writeFileSync(
-      path.join(__dirname, 'cards.json'), 
+      path.join(__dirname, 'public', 'cards.json'), 
       JSON.stringify(req.body, null, 2),
       'utf8'
     );
@@ -90,6 +90,45 @@ app.get('/', (req, res) => {
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
+
+// Загружаем карточки для вопросов
+let cardsData = {};
+try {
+  const cardsFile = fs.readFileSync(path.join(__dirname, 'public', 'cards.json'), 'utf8');
+  cardsData = JSON.parse(cardsFile);
+  console.log('✅ Карточки загружены на сервере');
+} catch (error) {
+  console.error('❌ Ошибка загрузки карточек:', error);
+  // Создаем демо-карточки
+  cardsData = {
+    categories: {
+      1: [
+        { question: "Как правильно приготовить борщ?", instruction: "Опишите основные шаги" },
+        { question: "Назовите 5 основных ингредиентов для салата Цезарь", instruction: "Перечислите ингредиенты" }
+      ],
+      2: [
+        { question: "Как приготовить коктейль Мохито?", instruction: "Опишите шаги приготовления" },
+        { question: "Что такое Манхэттен коктейль?", instruction: "Опишите состав и способ приготовления" }
+      ],
+      3: [
+        { question: "Какая температура подачи красного вина?", instruction: "Назовите оптимальную температуру" },
+        { question: "Что означает термин 'сомаелье'?", instruction: "Дайте определение" }
+      ],
+      4: [
+        { question: "Гость жалуется на холодное блюдо. Ваши действия?", instruction: "Опишите решение" },
+        { question: "Клиент просит заменить ингредиент из-за аллергии", instruction: "Как поступить?" }
+      ],
+      5: [
+        { question: "Как правильно сервировать стол?", instruction: "Опишите основные правила" },
+        { question: "В какой последовательности подавать приборы?", instruction: "Объясните порядок" }
+      ],
+      6: [
+        { question: "Как предложить гостю дорогое вино?", instruction: "Опишите технику продаж" },
+        { question: "Как увеличить средний чек?", instruction: "Назовите 3 способа" }
+      ]
+    }
+  };
+}
 
 // Хранилище комнат
 const rooms = new Map();
@@ -138,11 +177,12 @@ io.on('connection', (socket) => {
         positions: { 1: 0, 2: 0 },
         diceResult: 0,
         timer: 60,
-        gameStarted: false
+        gameStarted: false,
+        currentQuestion: null,
+        currentQuestionCategory: null
       },
       createdAt: Date.now(),
-      lastActivity: Date.now(),
-      chatHistory: []
+      lastActivity: Date.now()
     });
 
     socket.join(roomCode);
@@ -254,11 +294,6 @@ io.on('connection', (socket) => {
     };
 
     room.lastActivity = Date.now();
-
-    // Отправляем историю чата новому игроку
-    if (room.chatHistory.length > 0) {
-      socket.emit('chat-history', room.chatHistory.slice(-50)); // Последние 50 сообщений
-    }
 
     // Успешное подключение
     socket.emit('join-success', {
@@ -399,7 +434,25 @@ io.on('connection', (socket) => {
     room.state.diceResult = diceResult;
     room.lastActivity = Date.now();
 
-    // Отправляем результат всем в комнате
+    // Выбираем случайный вопрос из соответствующей категории
+    let questionData = null;
+    if (cardsData.categories && cardsData.categories[diceResult]) {
+      const questions = cardsData.categories[diceResult];
+      if (questions && questions.length > 0) {
+        const randomIndex = Math.floor(Math.random() * questions.length);
+        questionData = questions[randomIndex];
+      }
+    }
+
+    // Если вопрос не найден, создаем демо-вопрос
+    if (!questionData) {
+      questionData = {
+        question: `Вопрос для категории ${diceResult}`,
+        instruction: "Ответьте на вопрос"
+      };
+    }
+
+    // Отправляем результат всем в комнате вместе с вопросом
     io.to(roomCode).emit('dice-rolled', {
       dice: diceResult,
       player: currentPlayer,
@@ -408,15 +461,12 @@ io.on('connection', (socket) => {
       taskType: getTaskName(diceResult)
     });
 
-    // Добавляем сообщение в чат
-    const chatMessage = {
-      type: 'system',
-      sender: 'Система',
-      message: `${playerName} выбросил ${diceResult}!`,
-      timestamp: new Date().toISOString()
-    };
-    room.chatHistory.push(chatMessage);
-    io.to(roomCode).emit('new-message', chatMessage);
+    // Отправляем вопрос всем в комнате
+    io.to(roomCode).emit('question-show', {
+      question: questionData.question,
+      category: diceResult,
+      instruction: questionData.instruction || ''
+    });
 
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult} игроком ${playerName}`);
   });
@@ -430,16 +480,6 @@ io.on('connection', (socket) => {
     if (!room) return;
     
     room.lastActivity = Date.now();
-    
-    // Добавляем сообщение в чат
-    const chatMessage = {
-      type: 'system',
-      sender: 'Система',
-      message: `${playerName} завершил ответ`,
-      timestamp: new Date().toISOString()
-    };
-    room.chatHistory.push(chatMessage);
-    io.to(roomCode).emit('new-message', chatMessage);
     
     console.log(`✅ Игрок ${playerName} завершил ответ в комнате ${roomCode}`);
   });
@@ -472,16 +512,6 @@ io.on('connection', (socket) => {
           message: `🎉 Победила команда ${winner} (${winnerName})!`
         });
         
-        // Добавляем сообщение в чат
-        const chatMessage = {
-          type: 'system',
-          sender: 'Система',
-          message: `🎉 Победила команда ${winner} (${winnerName})! Игра завершена.`,
-          timestamp: new Date().toISOString()
-        };
-        room.chatHistory.push(chatMessage);
-        io.to(roomCode).emit('new-message', chatMessage);
-        
         console.log(`🏆 Игра завершена в комнате ${roomCode}, победитель: команда ${winner}`);
       }
     }
@@ -500,6 +530,8 @@ io.on('connection', (socket) => {
       room.state.currentPlayer = room.state.currentPlayer === 1 ? 2 : 1;
       room.state.diceResult = 0;
       room.state.timer = 60;
+      room.state.currentQuestion = null;
+      room.state.currentQuestionCategory = null;
       room.lastActivity = Date.now();
       
       const nextPlayerName = room.state.currentPlayer === 1 ? room.player1?.name : room.player2?.name;
@@ -509,16 +541,6 @@ io.on('connection', (socket) => {
         playerName: nextPlayerName,
         timestamp: new Date().toISOString()
       });
-      
-      // Добавляем сообщение в чат
-      const chatMessage = {
-        type: 'system',
-        sender: 'Система',
-        message: `Теперь ходит ${nextPlayerName}`,
-        timestamp: new Date().toISOString()
-      };
-      room.chatHistory.push(chatMessage);
-      io.to(roomCode).emit('new-message', chatMessage);
       
       console.log(`🔄 В комнате ${roomCode} ход передан игроку ${nextPlayerName}`);
     }
@@ -540,7 +562,9 @@ io.on('connection', (socket) => {
         positions: { 1: 0, 2: 0 },
         diceResult: 0,
         timer: 60,
-        gameStarted: true
+        gameStarted: true,
+        currentQuestion: null,
+        currentQuestionCategory: null
       };
       room.lastActivity = Date.now();
       
@@ -550,75 +574,7 @@ io.on('connection', (socket) => {
         playerName: room.player1?.name
       });
       
-      // Добавляем сообщение в чат
-      const chatMessage = {
-        type: 'system',
-        sender: 'Система',
-        message: 'Игра сброшена. Начинаем заново!',
-        timestamp: new Date().toISOString()
-      };
-      room.chatHistory.push(chatMessage);
-      io.to(roomCode).emit('new-message', chatMessage);
-      
       console.log(`🔄 Игра сброшена в комнате ${roomCode}`);
-    }
-  });
-
-  // Сообщения в чат
-  socket.on('send-message', (message) => {
-    const { roomCode, playerName } = socket.data;
-    if (!roomCode || !playerName) {
-      socket.emit('error', { message: 'Вы не в комнате' });
-      return;
-    }
-    
-    const room = rooms.get(roomCode);
-    if (!room) {
-      socket.emit('error', { message: 'Комната не найдена' });
-      return;
-    }
-    
-    // Проверяем длину сообщения
-    if (message.length > 500) {
-      socket.emit('error', { message: 'Сообщение слишком длинное (макс. 500 символов)' });
-      return;
-    }
-    
-    // Проверяем на спам (не более 5 сообщений за 10 секунд)
-    const userMessages = room.chatHistory.filter(m => 
-      m.sender === playerName && 
-      Date.now() - new Date(m.timestamp).getTime() < 10000
-    );
-    
-    if (userMessages.length >= 5) {
-      socket.emit('error', { message: 'Слишком много сообщений. Подождите немного.' });
-      return;
-    }
-    
-    const chatMessage = {
-      type: 'player',
-      sender: playerName,
-      message: message,
-      timestamp: new Date().toISOString()
-    };
-    
-    room.chatHistory.push(chatMessage);
-    room.lastActivity = Date.now();
-    
-    // Отправляем всем в комнате
-    io.to(roomCode).emit('new-message', chatMessage);
-    
-    console.log(`💬 Чат ${roomCode}: ${playerName}: ${message}`);
-  });
-
-  // Запрос истории чата
-  socket.on('get-chat-history', () => {
-    const { roomCode } = socket.data;
-    if (!roomCode) return;
-    
-    const room = rooms.get(roomCode);
-    if (room) {
-      socket.emit('chat-history', room.chatHistory.slice(-100)); // Последние 100 сообщений
     }
   });
 
