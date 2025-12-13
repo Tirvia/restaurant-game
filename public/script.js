@@ -15,6 +15,7 @@ class Game {
         this.pointsApplied = false;
         this.applyButtonClicked = false;
         this.diceRolledInCurrentTurn = false;
+        this.waitingForAnswer = false;
         
         this.boardWidth = 800;
         this.boardHeight = 600;
@@ -518,13 +519,23 @@ class Game {
             }
             
             this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
+            
+            // Устанавливаем флаг, что кубик брошен
+            this.diceRolledInCurrentTurn = true;
+            this.waitingForAnswer = true;
+            this.updateRollButton();
         });
         
         // ВАЖНО: Обработчик для получения вопросов от сервера
         this.socket.on('question-show', (data) => {
             console.log('📋 Получен вопрос от сервера:', data);
+            
+            // Определяем, является ли текущий пользователь отвечающим игроком
+            const isAnsweringPlayer = (this.role === 'player1' && this.currentPlayer === 1) || 
+                                     (this.role === 'player2' && this.currentPlayer === 2);
+            
             // Все участники получают одинаковый вопрос
-            this.showQuestion(data.question, data.category, data.instruction);
+            this.showQuestion(data.question, data.category, data.instruction, isAnsweringPlayer);
         });
         
         this.socket.on('game-updated', (gameState) => {
@@ -548,9 +559,43 @@ class Game {
             console.log('🔄 Смена хода:', data);
             this.currentPlayer = data.currentPlayer;
             this.diceRolledInCurrentTurn = false;
+            this.waitingForAnswer = false;
             this.updateTurnIndicator();
             this.updateRollButton();
             this.showNotification(`Сейчас ходит ${data.playerName}`, 'info');
+        });
+        
+        // Обновление таймера от сервера
+        this.socket.on('timer-update', (data) => {
+            const timerElement = document.getElementById('timer');
+            if (timerElement) {
+                timerElement.textContent = data.timer;
+            }
+        });
+        
+        // Время вышло
+        this.socket.on('timer-ended', () => {
+            console.log('⏰ Время вышло!');
+            this.waitingForAnswer = false;
+            this.hideCard();
+            
+            if (this.role === 'master') {
+                this.showMasterPanel();
+            }
+        });
+        
+        // Скрыть карточку (от сервера)
+        this.socket.on('hide-card', () => {
+            console.log('🃏 Скрываем карточку по команде сервера');
+            this.hideCard();
+        });
+        
+        // Показать панель ведущего (от сервера)
+        this.socket.on('show-master-panel', () => {
+            console.log('👑 Показываем панель ведущего по команде сервера');
+            if (this.role === 'master') {
+                this.showMasterPanel();
+            }
         });
         
         this.socket.on('error', (error) => {
@@ -1065,11 +1110,10 @@ class Game {
             console.log('✅ Обработчик для броска кубика установлен');
         }
         
-        // Кнопка "Завершить ответ"
+        // Кнопка "Завершить ответ" - теперь настраивается динамически в showQuestion()
         const answerBtn = document.getElementById('answer-received');
         if (answerBtn) {
-            answerBtn.textContent = 'Завершить ответ';
-            answerBtn.addEventListener('click', () => this.stopTimerAndCloseCard());
+            answerBtn.style.display = 'none'; // Скрываем по умолчанию
         }
         
         // Кнопки очков (только для ведущего или локального режима)
@@ -1137,7 +1181,6 @@ class Game {
             
             console.log('📤 Отправляем запрос на бросок кубика на сервер');
             this.socket.emit('roll-dice');
-            this.diceRolledInCurrentTurn = true;
             
         } else {
             // Локальный режим
@@ -1167,6 +1210,7 @@ class Game {
                 }
                 
                 this.diceRolledInCurrentTurn = true;
+                this.waitingForAnswer = true;
                 setTimeout(() => this.drawCard(this.diceResult), 500);
             }, 1500);
         }
@@ -1187,13 +1231,13 @@ class Game {
         // В онлайн-режиме НЕ отправляем вопрос от ведущего - сервер сам отправит
         // В локальном режиме показываем вопрос
         if (this.gameMode === 'local') {
-            this.showQuestion(randomCard.question, type, randomCard.instruction);
+            this.showQuestion(randomCard.question, type, randomCard.instruction, true);
         }
         // В онлайн-режиме вопрос придет от сервера через событие 'question-show'
     }
 
-    showQuestion(question, category, instruction = '') {
-        console.log('❓ Показываем вопрос:', { question, category, instruction });
+    showQuestion(question, category, instruction = '', isAnsweringPlayer = false) {
+        console.log('❓ Показываем вопрос:', { question, category, instruction, isAnsweringPlayer });
         const modal = document.getElementById('card-modal');
         if (!modal) {
             console.error('❌ Модальное окно не найдено!');
@@ -1211,26 +1255,59 @@ class Game {
         document.getElementById('card-question').textContent = question;
         document.getElementById('card-instruction').textContent = instruction || '';
         
-        // Настраиваем кнопку в зависимости от роли
+        // Настраиваем кнопку в зависимости от роли и режима
         const answerBtn = document.getElementById('answer-received');
         
-        if (this.role === 'master' || this.gameMode === 'local') {
+        if (this.gameMode === 'online') {
+            if (isAnsweringPlayer) {
+                // Отвечающий игрок видит кнопку "Завершить ответ"
+                answerBtn.textContent = 'Завершить ответ';
+                answerBtn.style.display = 'block';
+                answerBtn.onclick = () => {
+                    // Отправляем на сервер, что ответ завершен
+                    if (this.socket && this.isConnected) {
+                        this.socket.emit('answer-completed');
+                    }
+                    // Локально скрываем карточку
+                    this.hideCard();
+                };
+            } else if (this.role === 'master') {
+                // Ведущий видит кнопку "Приступить к оцениванию" 
+                // но она будет показана только после ответа игрока (через событие от сервера)
+                answerBtn.textContent = 'Приступить к оцениванию';
+                answerBtn.style.display = 'none'; // Скрыта по умолчанию
+                answerBtn.onclick = () => {
+                    this.hideCard();
+                    this.showMasterPanel();
+                    // Уведомляем сервер, что ведущий начал оценивание
+                    if (this.socket && this.isConnected) {
+                        this.socket.emit('start-evaluation');
+                    }
+                };
+            } else {
+                // Второй игрок не видит кнопку
+                answerBtn.style.display = 'none';
+            }
+        } else {
+            // Локальный режим
             answerBtn.textContent = 'Приступить к оцениванию';
+            answerBtn.style.display = 'block';
             answerBtn.onclick = () => {
-                clearInterval(this.timerInterval);
                 this.hideCard();
                 this.showMasterPanel();
             };
-        } else {
-            answerBtn.textContent = 'Завершить ответ';
-            answerBtn.onclick = () => this.stopTimerAndCloseCard();
         }
         
         modal.classList.add('active');
         
         setTimeout(() => {
             cardContent.classList.add('flipped');
-            this.startTimer();
+            
+            // Запускаем таймер только в локальном режиме
+            // В онлайн-режиме таймер управляется сервером
+            if (this.gameMode === 'local') {
+                this.startTimer();
+            }
         }, 1000);
     }
 
@@ -1264,20 +1341,19 @@ class Game {
         clearInterval(this.timerInterval);
         this.hideCard();
         
-        if (this.gameMode === 'online' && this.role !== 'master') {
-            const rollBtn = document.getElementById('roll-dice');
-            if (rollBtn) {
-                rollBtn.disabled = true;
-                rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте оценки ведущего';
-            }
-            this.showNotification('Ответ отправлен ведущему. Ожидайте оценки...', 'info');
-            
-            // В онлайн-режиме уведомляем сервер, что ответ завершен
-            if (this.socket && this.isConnected) {
-                this.socket.emit('answer-completed');
+        if (this.gameMode === 'online') {
+            if (this.role === 'master') {
+                this.showMasterPanel();
+            } else if (this.role === 'player1' || this.role === 'player2') {
+                const rollBtn = document.getElementById('roll-dice');
+                if (rollBtn) {
+                    rollBtn.disabled = true;
+                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте оценки ведущего';
+                }
+                this.showNotification('Ответ отправлен ведущему. Ожидайте оценки...', 'info');
             }
         } else {
-            // В локальном режиме или у ведущего в онлайн-режиме показываем панель ведущего
+            // В локальном режиме показываем панель ведущего
             this.showMasterPanel();
         }
     }
@@ -1292,6 +1368,12 @@ class Game {
         setTimeout(() => {
             modal.classList.remove('active');
         }, 500);
+        
+        // Скрываем кнопку у ведущего (если она была показана)
+        const answerBtn = document.getElementById('answer-received');
+        if (answerBtn && this.role === 'master') {
+            answerBtn.style.display = 'none';
+        }
     }
 
     showMasterPanel() {
@@ -1301,6 +1383,13 @@ class Game {
         if (panel) {
             panel.style.display = 'block';
         }
+        
+        // Показываем кнопку "Приступить к оцениванию" если она была скрыта
+        const answerBtn = document.getElementById('answer-received');
+        if (answerBtn && this.role === 'master') {
+            answerBtn.style.display = 'block';
+        }
+        
         this.showNotification('Оцените ответ команд и примените очки', 'info');
     }
 
@@ -1459,6 +1548,17 @@ class Game {
             
             if (Math.abs(points) <= 6) {
                 this.checkSpecialZone(team, newPosition);
+            }
+            
+            // Синхронизируем движение в онлайн-режиме
+            if (this.gameMode === 'online' && this.socket && this.isConnected) {
+                const gameState = {
+                    scores: this.scores,
+                    positions: this.positions,
+                    currentPlayer: this.currentPlayer,
+                    diceResult: this.diceResult
+                };
+                this.socket.emit('update-game', gameState);
             }
         });
     }
@@ -1668,7 +1768,7 @@ class Game {
             // Только игроки могут бросать, ведущий - нет
             const canRoll = (isPlayer1 && this.currentPlayer === 1) ||
                            (isPlayer2 && this.currentPlayer === 2);
-            const canRollNow = canRoll && !this.diceRolledInCurrentTurn;
+            const canRollNow = canRoll && !this.diceRolledInCurrentTurn && !this.waitingForAnswer;
             
             rollBtn.disabled = !canRollNow || isMaster;
             
@@ -1678,7 +1778,9 @@ class Game {
                 } else if (!canRoll) {
                     rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте хода';
                 } else if (this.diceRolledInCurrentTurn) {
-                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте оценки';
+                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте ответа';
+                } else if (this.waitingForAnswer) {
+                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте ответа';
                 }
             } else {
                 rollBtn.innerHTML = '<i class="fas fa-dice"></i> Бросить кубик';
@@ -1759,6 +1861,7 @@ class Game {
         this.showingSpecialZone = false;
         
         this.diceRolledInCurrentTurn = false;
+        this.waitingForAnswer = false;
         this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
         
         this.updateTurnIndicator();
