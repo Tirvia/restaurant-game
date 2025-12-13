@@ -100,18 +100,7 @@
         </div>
 
         <!-- Центральная карточка с вопросом -->
-        <div class="card-modal" id="card-modal">
-            <div class="card-content">
-                <div class="card-front">
-                    <div class="dice-icon" id="card-dice"></div>
-                </div>
-                <div class="card-back">
-                    <h3 id="card-category"></h3>
-                    <p id="card-question"></p>
-                    <div class="card-instruction" id="card-instruction"></div>
-                    <button id="answer-received" class="btn answer-btn">Завершить ответ</button>
-                </div>
-                <div class="card-modal" id="card-modal">
+      <div class="card-modal" id="card-modal">
     <div class="card-content">
         <div class="card-front">
             <div class="dice-icon" id="card-dice"></div>
@@ -120,14 +109,17 @@
             <h3 id="card-category"></h3>
             <p id="card-question"></p>
             <div class="card-instruction" id="card-instruction"></div>
-            <button id="answer-received" class="btn answer-btn" style="display: none;">Завершить ответ</button>
-            <button id="master-evaluation" class="btn evaluation-btn" style="display: none; background: #FF9800;">Приступить к оцениванию</button>
+            <!-- Кнопка для отвечающего игрока -->
+            <button id="answer-received" class="btn answer-btn" style="display: none;">
+                <i class="fas fa-check-circle"></i> Завершить ответ
+            </button>
+            <!-- Кнопка для ведущего -->
+            <button id="master-evaluation" class="btn evaluation-btn" style="display: none; background: #FF9800;">
+                <i class="fas fa-clipboard-check"></i> Приступить к оцениванию
+            </button>
         </div>
     </div>
 </div>
-            </div>
-        </div>
-
         <!-- Панель ведущего -->
         <div class="master-panel" id="master-panel">
             <h3>Панель ведущего</h3>
