@@ -7,7 +7,6 @@ const fs = require('fs');
 const app = express();
 const server = http.createServer(app);
 
-// Настройка CORS для Socket.io
 const io = socketIo(server, {
   cors: {
     origin: "*",
@@ -17,10 +16,7 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
-// Раздаём статические файлы
 app.use(express.static(path.join(__dirname, 'public')));
-
-// Middleware для парсинга JSON
 app.use(express.json());
 
 // API для проверки здоровья
@@ -58,40 +54,25 @@ app.get('/stats', (req, res) => {
   res.json(stats);
 });
 
-// API для редактирования вопросов
-app.get('/api/cards', (req, res) => {
-  try {
-    const cardsData = fs.readFileSync(path.join(__dirname, 'public', 'cards.json'), 'utf8');
-    res.json(JSON.parse(cardsData));
-  } catch (error) {
-    res.status(500).json({ error: 'Не удалось загрузить вопросы' });
+// API для очистки неактивных комнат
+app.post('/clear-rooms', (req, res) => {
+  const now = Date.now();
+  const timeout = 30 * 60 * 1000;
+  let cleaned = 0;
+  
+  for (const [roomCode, room] of rooms.entries()) {
+    if (now - room.lastActivity > timeout) {
+      rooms.delete(roomCode);
+      cleaned++;
+      io.to(roomCode).emit('room-closed', 'Комната удалена из-за неактивности');
+      io.in(roomCode).socketsLeave(roomCode);
+    }
   }
+  
+  res.json({ success: true, cleaned });
 });
 
-app.post('/api/cards', (req, res) => {
-  try {
-    fs.writeFileSync(
-      path.join(__dirname, 'public', 'cards.json'), 
-      JSON.stringify(req.body, null, 2),
-      'utf8'
-    );
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Не удалось сохранить вопросы' });
-  }
-});
-
-// Главная страница
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Страница администратора
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-// Загружаем карточки для вопросов
+// Загружаем карточки
 let cardsData = {};
 try {
   const cardsFile = fs.readFileSync(path.join(__dirname, 'public', 'cards.json'), 'utf8');
@@ -99,7 +80,6 @@ try {
   console.log('✅ Карточки загружены на сервере');
 } catch (error) {
   console.error('❌ Ошибка загрузки карточек:', error);
-  // Создаем демо-карточки
   cardsData = {
     categories: {
       1: [
@@ -132,18 +112,99 @@ try {
 
 // Хранилище комнат
 const rooms = new Map();
+const timers = new Map();
+
+// Функция для обновления таймера
+function updateTimer(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.state.timerRunning) return;
+  
+  if (room.state.timer > 0) {
+    room.state.timer--;
+    io.to(roomCode).emit('timer-update', {
+      timer: room.state.timer,
+      running: true
+    });
+  } else {
+    // Время вышло
+    room.state.timerRunning = false;
+    clearInterval(timers.get(roomCode));
+    timers.delete(roomCode);
+    
+    // Если отвечал игрок, уведомляем об окончании времени
+    if (room.state.waitingForAnswer && room.state.currentPlayer !== 'master') {
+      room.state.waitingForAnswer = false;
+      io.to(roomCode).emit('timer-ended');
+      io.to(roomCode).emit('hide-card');
+      
+      // Уведомляем ведущего, что можно оценивать
+      const masterSocket = io.sockets.sockets.get(room.master.id);
+      if (masterSocket) {
+        masterSocket.emit('show-master-panel');
+      }
+    }
+  }
+}
+
+// Функция для старта таймера
+function startTimer(roomCode, duration = 60) {
+  const room = rooms.get(roomCode);
+  if (!room) return;
+  
+  // Останавливаем старый таймер
+  if (timers.has(roomCode)) {
+    clearInterval(timers.get(roomCode));
+    timers.delete(roomCode);
+  }
+  
+  room.state.timer = duration;
+  room.state.timerRunning = true;
+  
+  // Отправляем начальное значение всем
+  io.to(roomCode).emit('timer-update', {
+    timer: room.state.timer,
+    running: true
+  });
+  
+  // Запускаем новый таймер
+  const timer = setInterval(() => updateTimer(roomCode), 1000);
+  timers.set(roomCode, timer);
+}
+
+// Функция для остановки таймера
+function stopTimer(roomCode) {
+  const room = rooms.get(roomCode);
+  if (room) {
+    room.state.timerRunning = false;
+  }
+  
+  if (timers.has(roomCode)) {
+    clearInterval(timers.get(roomCode));
+    timers.delete(roomCode);
+  }
+  
+  io.to(roomCode).emit('timer-update', {
+    timer: 60,
+    running: false
+  });
+}
 
 // Очистка неактивных комнат каждые 5 минут
 setInterval(() => {
   const now = Date.now();
-  const timeout = 30 * 60 * 1000; // 30 минут
+  const timeout = 30 * 60 * 1000;
   
   for (const [roomCode, room] of rooms.entries()) {
     if (now - room.lastActivity > timeout) {
       console.log(`🗑️ Удалена неактивная комната: ${roomCode}`);
       rooms.delete(roomCode);
       
-      // Уведомляем всех в комнате
+      // Останавливаем таймер
+      if (timers.has(roomCode)) {
+        clearInterval(timers.get(roomCode));
+        timers.delete(roomCode);
+      }
+      
       io.to(roomCode).emit('room-closed', 'Комната удалена из-за неактивности');
       io.in(roomCode).socketsLeave(roomCode);
     }
@@ -153,7 +214,6 @@ setInterval(() => {
 io.on('connection', (socket) => {
   console.log('🎮 Новый игрок подключен:', socket.id);
   
-  // Отправляем статистику при подключении
   socket.emit('server-stats', {
     totalRooms: Array.from(rooms.keys()).length,
     activePlayers: io.engine.clientsCount
@@ -177,7 +237,9 @@ io.on('connection', (socket) => {
         positions: { 1: 0, 2: 0 },
         diceResult: 0,
         timer: 60,
+        timerRunning: false,
         gameStarted: false,
+        waitingForAnswer: false,
         currentQuestion: null,
         currentQuestionCategory: null
       },
@@ -201,7 +263,6 @@ io.on('connection', (socket) => {
       timestamp: new Date().toISOString()
     });
 
-    // Обновляем статистику для всех
     io.emit('server-stats-update', {
       totalRooms: Array.from(rooms.keys()).length
     });
@@ -221,7 +282,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Проверяем, не присоединяется ли уже подключенный игрок
     if (room.master.id === socket.id) {
       socket.emit('error', { 
         code: 'ALREADY_IN_ROOM', 
@@ -331,7 +391,6 @@ io.on('connection', (socket) => {
       });
     }
 
-    // Обновляем статистику для всех
     io.emit('server-stats-update', {
       totalRooms: Array.from(rooms.keys()).length,
       activePlayers: io.engine.clientsCount
@@ -407,13 +466,11 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Проверяем, началась ли игра
     if (!room.state.gameStarted) {
       socket.emit('error', { message: 'Игра еще не началась. Ожидайте подключения всех игроков.' });
       return;
     }
 
-    // Только текущий игрок может бросать
     const currentPlayer = room.state.currentPlayer;
     const canRoll = 
       (role === 'player1' && currentPlayer === 1) ||
@@ -424,7 +481,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Проверяем, не бросал ли уже кубик в этом ходе
     if (room.state.diceResult !== 0) {
       socket.emit('error', { message: 'Кубик уже брошен в этом ходе' });
       return;
@@ -432,9 +488,10 @@ io.on('connection', (socket) => {
 
     const diceResult = Math.floor(Math.random() * 6) + 1;
     room.state.diceResult = diceResult;
+    room.state.waitingForAnswer = true;
     room.lastActivity = Date.now();
 
-    // Выбираем случайный вопрос из соответствующей категории
+    // Выбираем случайный вопрос
     let questionData = null;
     if (cardsData.categories && cardsData.categories[diceResult]) {
       const questions = cardsData.categories[diceResult];
@@ -444,7 +501,6 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Если вопрос не найден, создаем демо-вопрос
     if (!questionData) {
       questionData = {
         question: `Вопрос для категории ${diceResult}`,
@@ -452,7 +508,11 @@ io.on('connection', (socket) => {
       };
     }
 
-    // Отправляем результат всем в комнате вместе с вопросом
+    // Сохраняем вопрос в состоянии
+    room.state.currentQuestion = questionData.question;
+    room.state.currentQuestionCategory = diceResult;
+
+    // Отправляем результат всем в комнате
     io.to(roomCode).emit('dice-rolled', {
       dice: diceResult,
       player: currentPlayer,
@@ -465,8 +525,13 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('question-show', {
       question: questionData.question,
       category: diceResult,
-      instruction: questionData.instruction || ''
+      instruction: questionData.instruction || '',
+      forPlayer: currentPlayer, // Указываем, для какого игрока вопрос
+      isAnsweringPlayer: (role === 'player1' && currentPlayer === 1) || (role === 'player2' && currentPlayer === 2)
     });
+
+    // Запускаем таймер для всех
+    startTimer(roomCode);
 
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult} игроком ${playerName}`);
   });
@@ -479,9 +544,36 @@ io.on('connection', (socket) => {
     const room = rooms.get(roomCode);
     if (!room) return;
     
+    room.state.waitingForAnswer = false;
     room.lastActivity = Date.now();
     
+    // Останавливаем таймер
+    stopTimer(roomCode);
+    
+    // Скрываем карточку у всех
+    io.to(roomCode).emit('hide-card');
+    
+    // Показываем панель ведущего
+    const masterSocket = io.sockets.sockets.get(room.master.id);
+    if (masterSocket) {
+      masterSocket.emit('show-master-panel');
+    }
+    
     console.log(`✅ Игрок ${playerName} завершил ответ в комнате ${roomCode}`);
+  });
+
+  // Ведущий начал оценивание
+  socket.on('start-evaluation', () => {
+    const { roomCode, role } = socket.data;
+    if (!roomCode || role !== 'master') return;
+    
+    const room = rooms.get(roomCode);
+    if (!room) return;
+    
+    room.lastActivity = Date.now();
+    
+    // Скрываем карточку у всех
+    io.to(roomCode).emit('hide-card');
   });
 
   // Обновление состояния игры
@@ -494,11 +586,14 @@ io.on('connection', (socket) => {
     
     const room = rooms.get(roomCode);
     if (room) {
-      room.state = { ...room.state, ...gameState };
+      // Обновляем позиции и очки
+      room.state.scores = gameState.scores || room.state.scores;
+      room.state.positions = gameState.positions || room.state.positions;
+      room.state.currentPlayer = gameState.currentPlayer || room.state.currentPlayer;
       room.lastActivity = Date.now();
       
       // Отправляем обновление всем в комнате
-      socket.to(roomCode).emit('game-updated', room.state);
+      io.to(roomCode).emit('game-updated', room.state);
       
       // Проверяем победителя
       if (room.state.positions[1] >= 40 || room.state.positions[2] >= 40) {
@@ -529,10 +624,13 @@ io.on('connection', (socket) => {
     if (room) {
       room.state.currentPlayer = room.state.currentPlayer === 1 ? 2 : 1;
       room.state.diceResult = 0;
-      room.state.timer = 60;
+      room.state.waitingForAnswer = false;
       room.state.currentQuestion = null;
       room.state.currentQuestionCategory = null;
       room.lastActivity = Date.now();
+      
+      // Останавливаем таймер
+      stopTimer(roomCode);
       
       const nextPlayerName = room.state.currentPlayer === 1 ? room.player1?.name : room.player2?.name;
       
@@ -562,11 +660,16 @@ io.on('connection', (socket) => {
         positions: { 1: 0, 2: 0 },
         diceResult: 0,
         timer: 60,
+        timerRunning: false,
         gameStarted: true,
+        waitingForAnswer: false,
         currentQuestion: null,
         currentQuestionCategory: null
       };
       room.lastActivity = Date.now();
+      
+      // Останавливаем таймер
+      stopTimer(roomCode);
       
       io.to(roomCode).emit('game-reset', {
         message: 'Игра сброшена. Начинаем заново!',
@@ -578,7 +681,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Пинг для поддержания соединения
+  // Пинг
   socket.on('ping', () => {
     socket.emit('pong', { timestamp: Date.now() });
   });
@@ -596,6 +699,12 @@ io.on('connection', (socket) => {
     room.lastActivity = Date.now();
 
     if (role === 'master') {
+      // Останавливаем таймер
+      if (timers.has(roomCode)) {
+        clearInterval(timers.get(roomCode));
+        timers.delete(roomCode);
+      }
+      
       // Удаляем комнату
       rooms.delete(roomCode);
       io.to(roomCode).emit('room-closed', {
@@ -614,7 +723,6 @@ io.on('connection', (socket) => {
         timestamp: new Date().toISOString()
       });
       
-      // Если остался только ведущий, помечаем игру как не начавшуюся
       if (!room.player2) {
         room.state.gameStarted = false;
       }
@@ -627,26 +735,23 @@ io.on('connection', (socket) => {
         timestamp: new Date().toISOString()
       });
       
-      // Если остался только ведущий, помечаем игру как не начавшейся
       if (!room.player1) {
         room.state.gameStarted = false;
       }
     }
 
-    // Обновляем статистику
     io.emit('server-stats-update', {
       totalRooms: Array.from(rooms.keys()).length,
       activePlayers: io.engine.clientsCount
     });
   });
 
-  // Обработка ошибок
+  // Ошибки
   socket.on('error', (error) => {
     console.error('❌ Ошибка сокета:', error);
   });
 });
 
-// Генератор кода комнаты
 function generateRoomCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
@@ -654,15 +759,13 @@ function generateRoomCode() {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   
-  // Проверяем уникальность кода
   if (rooms.has(code)) {
-    return generateRoomCode(); // Рекурсивно генерируем новый код
+    return generateRoomCode();
   }
   
   return code;
 }
 
-// Получение названия задания по номеру кубика
 function getTaskName(diceNumber) {
   const tasks = {
     1: 'Кухня',
@@ -675,16 +778,13 @@ function getTaskName(diceNumber) {
   return tasks[diceNumber] || 'Неизвестное задание';
 }
 
-// Обработка ошибок сервера
 server.on('error', (error) => {
   console.error('❌ Ошибка сервера:', error);
 });
 
-// Graceful shutdown
 process.on('SIGINT', () => {
   console.log('🛑 Получен SIGINT. Завершаем работу сервера...');
   
-  // Отправляем всем клиентам сообщение о закрытии
   io.emit('server-shutdown', {
     message: 'Сервер выключается. Игра будет завершена.',
     timestamp: new Date().toISOString()
