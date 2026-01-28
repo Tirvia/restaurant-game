@@ -564,9 +564,6 @@ io.on('connection', (socket) => {
       masterSocket.emit('answer-completed-by-player');
     }
     
-    // Уведомляем второго игрока, чтобы он тоже скрыл карточку? 
-    // Нет, второй игрок пока оставляет карточку видимой (она скроется, когда ведущий начнет оценивание)
-    
     console.log(`✅ Игрок ${playerName} завершил ответ в комнате ${roomCode}`);
   });
 
@@ -587,6 +584,60 @@ io.on('connection', (socket) => {
     socket.emit('master-finished-evaluation');
     
     console.log(`👑 Ведущий начал оценивание в комнате ${roomCode}`);
+  });
+
+  // Специальная зона (ведущий отправил вопрос зоны)
+  socket.on('special-zone', (data) => {
+    const { roomCode, ...zoneData } = data;
+    const { role } = socket.data;
+    
+    if (!roomCode || role !== 'master') return;
+    
+    // Отправляем вопрос зоны всем в комнате
+    io.to(roomCode).emit('special-zone', zoneData);
+    
+    console.log(`🎯 Ведущий отправил специальную зону в комнате ${roomCode}: ${zoneData.zoneName}`);
+  });
+
+  // Результат специальной зоны (ведущий оценил ответ)
+  socket.on('special-zone-result', (data) => {
+    const { roomCode, team, points } = data;
+    const { role } = socket.data;
+    
+    if (!roomCode || role !== 'master') return;
+    
+    const room = rooms.get(roomCode);
+    if (!room) return;
+    
+    // Обновляем позицию фишки
+    const newPosition = Math.max(0, Math.min(room.state.positions[team] + points, 40));
+    room.state.positions[team] = newPosition;
+    
+    // Обновляем очки (если положительные очки)
+    if (points > 0) {
+      room.state.scores[team] += points;
+    }
+    
+    room.lastActivity = Date.now();
+    
+    // Отправляем обновленное состояние всем
+    io.to(roomCode).emit('game-updated', room.state);
+    
+    // Отправляем результат зоны всем
+    io.to(roomCode).emit('special-zone-result', { team, points });
+    
+    // Проверяем победителя
+    if (newPosition >= 40) {
+      const winnerName = team === 1 ? room.player1?.name : room.player2?.name;
+      io.to(roomCode).emit('game-over', {
+        winner: team,
+        winnerName,
+        scores: room.state.scores,
+        message: `🎉 Победила команда ${team} (${winnerName})!`
+      });
+    }
+    
+    console.log(`🎯 Результат специальной зоны в комнате ${roomCode}: команда ${team} получила ${points} очков`);
   });
 
   // Обновление состояния игры
@@ -834,4 +885,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🔗 WebSocket доступен на ws://0.0.0.0:${PORT}`);
   console.log(`📊 Статистика доступна на http://0.0.0.0:${PORT}/stats`);
   console.log(`❤️  Проверка здоровья на http://0.0.0.0:${PORT}/health`);
+  console.log(`👑 Админ-панель доступна на http://0.0.0.0:${PORT}/admin.html`);
 });
