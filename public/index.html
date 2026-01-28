@@ -38,7 +38,7 @@
         <div class="top-panel">
             <div class="score-board">
                 <div class="team-score" id="team1-score">
-                    <h3>Команда 1</h3>
+                    <h3 id="team1-name">Команда 1</h3>
                     <div class="score">0</div>
                 </div>
                 <div class="dice-container">
@@ -47,7 +47,7 @@
                     <div id="task-type"></div>
                 </div>
                 <div class="team-score" id="team2-score">
-                    <h3>Команда 2</h3>
+                    <h3 id="team2-name">Команда 2</h3>
                     <div class="score">0</div>
                 </div>
             </div>
@@ -100,32 +100,33 @@
         </div>
 
         <!-- Центральная карточка с вопросом -->
-      <div class="card-modal" id="card-modal">
-    <div class="card-content">
-        <div class="card-front">
-            <div class="dice-icon" id="card-dice"></div>
+        <div class="card-modal" id="card-modal">
+            <div class="card-content">
+                <div class="card-front">
+                    <div class="dice-icon" id="card-dice"></div>
+                </div>
+                <div class="card-back">
+                    <h3 id="card-category"></h3>
+                    <p id="card-question"></p>
+                    <div class="card-instruction" id="card-instruction"></div>
+                    <!-- Кнопка для отвечающего игрока -->
+                    <button id="answer-received" class="btn answer-btn" style="display: none;">
+                        <i class="fas fa-check-circle"></i> Завершить ответ
+                    </button>
+                    <!-- Кнопка для ведущего -->
+                    <button id="master-evaluation" class="btn evaluation-btn" style="display: none; background: #FF9800;">
+                        <i class="fas fa-clipboard-check"></i> Приступить к оцениванию
+                    </button>
+                </div>
+            </div>
         </div>
-        <div class="card-back">
-            <h3 id="card-category"></h3>
-            <p id="card-question"></p>
-            <div class="card-instruction" id="card-instruction"></div>
-            <!-- Кнопка для отвечающего игрока -->
-            <button id="answer-received" class="btn answer-btn" style="display: none;">
-                <i class="fas fa-check-circle"></i> Завершить ответ
-            </button>
-            <!-- Кнопка для ведущего -->
-            <button id="master-evaluation" class="btn evaluation-btn" style="display: none; background: #FF9800;">
-                <i class="fas fa-clipboard-check"></i> Приступить к оцениванию
-            </button>
-        </div>
-    </div>
-</div>
+
         <!-- Панель ведущего -->
         <div class="master-panel" id="master-panel">
             <h3>Панель ведущего</h3>
             <div class="points-control">
                 <div class="team-control">
-                    <h4>Команда 1</h4>
+                    <h4 id="master-team1-name">Команда 1</h4>
                     <div class="points-section">
                         <div class="plus-points">
                             <h5>Добавить очки:</h5>
@@ -149,7 +150,7 @@
                     </div>
                 </div>
                 <div class="team-control">
-                    <h4>Команда 2</h4>
+                    <h4 id="master-team2-name">Команда 2</h4>
                     <div class="points-section">
                         <div class="plus-points">
                             <h5>Добавить очки:</h5>
