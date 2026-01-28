@@ -66,6 +66,16 @@ class Game {
         // Режим игры
         this.gameMode = null;
         
+        // Хранение имен игроков
+        this.players = {
+            master: '',
+            player1: '',
+            player2: ''
+        };
+        
+        // Для специальных зон
+        this.specialZoneData = null;
+        
         this.init();
     }
 
@@ -92,7 +102,7 @@ class Game {
             modal.className = 'role-selection-modal';
             modal.innerHTML = `
                 <div class="role-selection-content">
-                    <h2><i class="fas fa-gamepad"></i> Выберите режим игры</h2>
+                    <h2><i class="fas fa-gamepad"></i> GARAGE - Меню игры</h2>
                     
                     <div class="mode-options">
                         <div class="mode-option">
@@ -114,6 +124,16 @@ class Game {
                                 </div>
                             </button>
                         </div>
+                        
+                        <div class="mode-option">
+                            <button class="mode-btn" id="admin-btn">
+                                <i class="fas fa-cogs"></i>
+                                <div>
+                                    <strong>Админ-панель</strong>
+                                    <small>Управление сервером игры</small>
+                                </div>
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="game-info">
@@ -124,15 +144,25 @@ class Game {
             
             document.body.appendChild(modal);
             
-            const modeButtons = modal.querySelectorAll('.mode-btn');
-            
-            modeButtons.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    this.gameMode = btn.dataset.mode;
-                    modal.remove();
-                    resolve();
-                });
+            const modeButtons = modal.querySelectorAll('.mode-btn[data-mode]');
+        const adminBtn = modal.querySelector('#admin-btn');
+        
+        modeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.gameMode = btn.dataset.mode;
+                modal.remove();
+                resolve();
             });
+        });
+        
+        adminBtn.addEventListener('click', () => {
+            const password = prompt('Введите пароль для доступа к админ-панели:');
+            if (password === 'admin') {
+                window.location.href = 'admin.html';
+            } else if (password !== null) {
+                alert('Неверный пароль!');
+            }
+        });
         });
     }
 
@@ -401,6 +431,7 @@ class Game {
         this.socket.on('room-created', (data) => {
             this.roomCode = data.roomCode;
             this.playerName = data.playerName;
+            this.players.master = data.playerName;
             
             modal.querySelector('#room-info').style.display = 'block';
             modal.querySelector('#room-code-display').textContent = data.roomCode;
@@ -437,6 +468,11 @@ class Game {
                 this.diceResult = data.gameState.diceResult || 0;
             }
             
+            // Сохраняем имена игроков
+            if (data.players) {
+                this.updatePlayers(data.players);
+            }
+            
             statusText.innerHTML = '<i class="fas fa-check-circle"></i> Вы в игре!';
             
             setTimeout(() => {
@@ -447,16 +483,24 @@ class Game {
         
         this.socket.on('player-joined', (data) => {
             this.showNotification(`${data.playerName} присоединился как ${this.getRoleNameFromType(data.role)}`, 'info');
-            this.updateVideoPlaceholders(data.players);
+            
+            // Обновляем имена игроков
+            if (data.players) {
+                this.updatePlayers(data.players);
+            }
         });
         
         this.socket.on('player-left', (data) => {
             this.showNotification(`${data.playerName} покинул игру`, 'warning');
             
             if (data.role === 'player1') {
+                this.players.player1 = '';
                 document.querySelector('#video-team1 .video-placeholder p').textContent = 'Команда 1';
+                document.querySelector('#team1-score h3').textContent = 'Команда 1';
             } else if (data.role === 'player2') {
+                this.players.player2 = '';
                 document.querySelector('#video-team2 .video-placeholder p').textContent = 'Команда 2';
+                document.querySelector('#team2-score h3').textContent = 'Команда 2';
             }
         });
         
@@ -544,6 +588,32 @@ class Game {
             }
         });
         
+        // СОБЫТИЕ: Специальная зона
+        this.socket.on('special-zone', (data) => {
+            console.log('🎯 Получена специальная зона:', data);
+            this.showSpecialZoneModal(data);
+        });
+        
+        // СОБЫТИЕ: Результат специальной зоны
+        this.socket.on('special-zone-result', (data) => {
+            console.log('🎯 Результат специальной зоны:', data);
+            
+            // Закрываем модальное окно зоны у всех игроков
+            const modal = document.querySelector('.special-zone-modal');
+            if (modal) modal.remove();
+            
+            // Двигаем фишку (если это не ведущий, который уже обработал)
+            if (this.role !== 'master') {
+                this.movePiece(data.team, data.points);
+                this.specialZoneData = null;
+                
+                // Показываем следующую зону, если есть
+                if (!this.showingSpecialZone) {
+                    setTimeout(() => this.showNextSpecialZone(), 500);
+                }
+            }
+        });
+        
         this.socket.on('game-updated', (gameState) => {
             console.log('🔄 Обновление состояния игры:', gameState);
             this.scores = gameState.scores || this.scores;
@@ -621,6 +691,16 @@ class Game {
         });
     }
 
+    // Обновляем имена игроков
+    updatePlayers(players) {
+        this.players.master = players.master || '';
+        this.players.player1 = players.player1 || '';
+        this.players.player2 = players.player2 || '';
+        
+        // Обновляем отображение
+        this.updateVideoPlaceholders();
+    }
+
     async continueGameInitialization() {
         console.log('🎥 Инициализируем видео...');
         if (this.gameMode === 'online') {
@@ -681,9 +761,13 @@ class Game {
                         
                         const text = placeholder.querySelector('p');
                         if (text) {
-                            text.innerHTML = this.role === 'master' 
-                                ? `<i class="fas fa-crown"></i> ${this.playerName} (Ведущий)`
-                                : `<i class="fas fa-user"></i> ${this.playerName} (Команда ${this.role === 'player1' ? '1' : '2'})`;
+                            if (this.role === 'master') {
+                                text.innerHTML = `<i class="fas fa-crown"></i> Ведущий: ${this.playerName}`;
+                            } else if (this.role === 'player1') {
+                                text.innerHTML = `<i class="fas fa-user"></i> Команда 1: ${this.playerName}`;
+                            } else if (this.role === 'player2') {
+                                text.innerHTML = `<i class="fas fa-user"></i> Команда 2: ${this.playerName}`;
+                            }
                         }
                         
                         videoElement.style.width = '100%';
@@ -701,25 +785,34 @@ class Game {
         }
     }
 
-    updateVideoPlaceholders(players) {
-        if (players.master && this.role !== 'master') {
-            const masterPlaceholder = document.querySelector('#video-master .video-placeholder p');
-            if (masterPlaceholder) {
-                masterPlaceholder.innerHTML = `<i class="fas fa-crown"></i> ${players.master}`;
-            }
+    updateVideoPlaceholders() {
+        // Обновляем мастер
+        const masterPlaceholder = document.querySelector('#video-master .video-placeholder p');
+        if (masterPlaceholder && this.players.master) {
+            masterPlaceholder.innerHTML = `<i class="fas fa-crown"></i> Ведущий: ${this.players.master}`;
         }
 
-        if (players.player1 && this.role !== 'player1') {
-            const player1Placeholder = document.querySelector('#video-team1 .video-placeholder p');
+        // Обновляем игрока 1
+        const player1Placeholder = document.querySelector('#video-team1 .video-placeholder p');
+        const player1Score = document.querySelector('#team1-score h3');
+        if (this.players.player1) {
             if (player1Placeholder) {
-                player1Placeholder.innerHTML = `<i class="fas fa-user"></i> ${players.player1}`;
+                player1Placeholder.innerHTML = `<i class="fas fa-user"></i> Команда 1: ${this.players.player1}`;
+            }
+            if (player1Score) {
+                player1Score.textContent = `Команда 1: ${this.players.player1}`;
             }
         }
 
-        if (players.player2 && this.role !== 'player2') {
-            const player2Placeholder = document.querySelector('#video-team2 .video-placeholder p');
+        // Обновляем игрока 2
+        const player2Placeholder = document.querySelector('#video-team2 .video-placeholder p');
+        const player2Score = document.querySelector('#team2-score h3');
+        if (this.players.player2) {
             if (player2Placeholder) {
-                player2Placeholder.innerHTML = `<i class="fas fa-user"></i> ${players.player2}`;
+                player2Placeholder.innerHTML = `<i class="fas fa-user"></i> Команда 2: ${this.players.player2}`;
+            }
+            if (player2Score) {
+                player2Score.textContent = `Команда 2: ${this.players.player2}`;
             }
         }
     }
@@ -777,8 +870,8 @@ class Game {
     getRoleNameFromType(roleType) {
         switch(roleType) {
             case 'master': return 'Ведущий';
-            case 'player1': return 'Игрок 1';
-            case 'player2': return 'Игрок 2';
+            case 'player1': return 'Игрок 1 (Команда 1)';
+            case 'player2': return 'Игрок 2 (Команда 2)';
             default: return 'Игрок';
         }
     }
@@ -1620,6 +1713,29 @@ class Game {
         const task = this.specialZoneQueue.shift();
         const zoneSettings = this.zoneSettings[task.zoneType];
         
+        // Сохраняем данные зоны для всех
+        this.specialZoneData = {
+            team: task.team,
+            zoneType: task.zoneType,
+            zoneName: zoneSettings.name,
+            question: zoneSettings.question,
+            positive: zoneSettings.positive,
+            negative: zoneSettings.negative
+        };
+        
+        // В онлайн-режиме отправляем данные всем
+        if (this.gameMode === 'online' && this.socket && this.isConnected) {
+            this.socket.emit('special-zone', {
+                roomCode: this.roomCode,
+                ...this.specialZoneData
+            });
+        }
+        
+        // Показываем зону локально
+        this.showSpecialZoneModal(this.specialZoneData);
+    }
+
+    showSpecialZoneModal(data) {
         const modal = document.createElement('div');
         modal.className = 'special-zone-modal';
         modal.style.cssText = `
@@ -1628,48 +1744,79 @@ class Game {
             left: 50%;
             transform: translate(-50%, -50%);
             width: 500px;
-            background: white;
+            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
             border-radius: 20px;
             padding: 30px;
-            color: #333;
+            color: white;
             z-index: 1001;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            border: 5px solid ${this.getZoneColor(task.zoneType)};
+            border: 5px solid ${this.getZoneColor(data.zoneType)};
         `;
         
+        const isMaster = this.gameMode === 'local' || this.role === 'master';
+        const teamName = data.team === 1 ? 
+            (this.gameMode === 'online' ? `Команда 1: ${this.players.player1 || ''}` : 'Команда 1') : 
+            (this.gameMode === 'online' ? `Команда 2: ${this.players.player2 || ''}` : 'Команда 2');
+        
         modal.innerHTML = `
-            <h3 style="color: ${this.getZoneColor(task.zoneType)}; margin-bottom: 20px; text-align: center;">
-                ${zoneSettings.name}
+            <h3 style="color: ${this.getZoneColor(data.zoneType)}; margin-bottom: 20px; text-align: center;">
+                ${data.zoneName}
             </h3>
             <p style="font-size: 18px; margin-bottom: 15px; text-align: center;">
-                Вопрос для команды ${task.team}
+                Вопрос для ${teamName}
             </p>
-            <div style="font-size: 16px; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 10px;">
-                ${zoneSettings.question}
+            <div style="font-size: 16px; margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 10px;">
+                ${data.question}
             </div>
+            ${isMaster ? `
             <div style="text-align: center; margin-top: 30px;">
                 <button id="special-correct" class="btn" style="background: #4CAF50; margin-right: 20px;">
-                    Верно (+${zoneSettings.positive})
+                    Верно (+${data.positive})
                 </button>
                 <button id="special-incorrect" class="btn" style="background: #f44336;">
-                    Неверно (${zoneSettings.negative})
+                    Неверно (${data.negative})
                 </button>
             </div>
+            ` : `
+            <div style="text-align: center; margin-top: 30px; color: #aaa;">
+                <i class="fas fa-clock"></i> Ожидайте оценки ведущего
+            </div>
+            `}
         `;
         
         document.body.appendChild(modal);
         
-        modal.querySelector('#special-correct').addEventListener('click', () => {
-            this.movePiece(task.team, zoneSettings.positive);
-            modal.remove();
-            setTimeout(() => this.showNextSpecialZone(), 500);
-        });
+        if (isMaster) {
+            modal.querySelector('#special-correct').addEventListener('click', () => {
+                this.movePiece(data.team, data.positive);
+                // В онлайн-режиме отправляем результат
+                if (this.gameMode === 'online' && this.socket && this.isConnected) {
+                    this.socket.emit('special-zone-result', {
+                        roomCode: this.roomCode,
+                        team: data.team,
+                        points: data.positive
+                    });
+                }
+                modal.remove();
+                this.specialZoneData = null;
+                setTimeout(() => this.showNextSpecialZone(), 500);
+            });
 
-        modal.querySelector('#special-incorrect').addEventListener('click', () => {
-            this.movePiece(task.team, zoneSettings.negative);
-            modal.remove();
-            setTimeout(() => this.showNextSpecialZone(), 500);
-        });
+            modal.querySelector('#special-incorrect').addEventListener('click', () => {
+                this.movePiece(data.team, data.negative);
+                // В онлайн-режиме отправляем результат
+                if (this.gameMode === 'online' && this.socket && this.isConnected) {
+                    this.socket.emit('special-zone-result', {
+                        roomCode: this.roomCode,
+                        team: data.team,
+                        points: data.negative
+                    });
+                }
+                modal.remove();
+                this.specialZoneData = null;
+                setTimeout(() => this.showNextSpecialZone(), 500);
+            });
+        }
     }
 
     getZoneColor(zoneType) {
@@ -1834,6 +1981,7 @@ class Game {
         this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
         this.specialZoneQueue = [];
         this.showingSpecialZone = false;
+        this.specialZoneData = null;
         
         this.diceRolledInCurrentTurn = false;
         this.waitingForAnswer = false;
