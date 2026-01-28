@@ -102,6 +102,7 @@ body {
     padding: 20px;
     background: #2a2a2a;
     border-radius: 15px;
+    position: relative;
 }
 
 .score-board {
@@ -128,6 +129,10 @@ body {
 .team-score h3 {
     margin-bottom: 10px;
     color: #4CAF50;
+    font-size: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .score {
@@ -500,6 +505,9 @@ body {
     margin-bottom: 15px;
     color: #4CAF50;
     font-size: 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .points-section {
@@ -711,7 +719,7 @@ body {
     to { transform: translateX(100%); opacity: 0; }
 }
 
-/* Модальное окно выбора роли */
+/* Модальное окно выбора режима */
 .role-selection-modal {
     position: fixed;
     top: 0;
@@ -727,91 +735,109 @@ body {
 }
 
 .role-selection-content {
-    background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+    background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
     padding: 40px;
     border-radius: 20px;
     text-align: center;
     border: 3px solid #4CAF50;
     max-width: 500px;
     width: 90%;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    color: white;
 }
 
 .role-selection-content h2 {
     color: #4CAF50;
-    margin-bottom: 30px;
+    margin-bottom: 10px;
     font-size: 28px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
 .mode-options {
     display: flex;
     flex-direction: column;
-    gap: 20px;
-    margin-bottom: 30px;
+    gap: 15px;
+    margin: 30px 0;
 }
 
 .mode-option {
-    background: #333;
-    padding: 20px;
-    border-radius: 10px;
-    border: 2px solid #444;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    overflow: hidden;
     transition: all 0.3s;
+    border: 2px solid transparent;
 }
 
 .mode-option:hover {
     border-color: #4CAF50;
-    transform: translateY(-3px);
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(76, 175, 80, 0.3);
 }
 
-.mode-label {
+.mode-btn {
+    width: 100%;
+    padding: 20px;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
     display: flex;
     align-items: center;
     gap: 20px;
-    cursor: pointer;
     text-align: left;
 }
 
-.mode-label i {
-    font-size: 40px;
+.mode-btn i {
+    font-size: 32px;
     color: #4CAF50;
 }
 
-.mode-details {
-    margin-top: 10px;
+.mode-btn div {
+    flex: 1;
+}
+
+.mode-btn strong {
+    display: block;
+    font-size: 18px;
+    margin-bottom: 5px;
+    color: #fff;
+}
+
+.mode-btn small {
+    display: block;
     font-size: 12px;
     color: #aaa;
 }
 
-.mode-details p {
-    margin: 5px 0;
+#admin-btn i {
+    color: #FF9800;
+}
+
+#admin-btn:hover {
+    background: rgba(255, 152, 0, 0.1);
+}
+
+.game-info {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 10px;
+    margin-top: 20px;
+    border-left: 4px solid #2196F3;
+}
+
+.game-info p {
+    margin: 0;
+    font-size: 14px;
+    color: #aaa;
     display: flex;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    gap: 10px;
 }
 
-.mode-details i {
-    font-size: 12px;
-    color: #4CAF50;
-}
-
-.connection-info {
-    background: rgba(255,255,255,0.1);
-    padding: 10px;
-    border-radius: 5px;
-    margin-bottom: 20px;
-    font-size: 14px;
-}
-
-.name-input-section {
-    margin-bottom: 25px;
-    text-align: left;
-}
-
-.name-input-section label {
-    display: block;
-    margin-bottom: 8px;
-    color: #4CAF50;
-    font-weight: bold;
+.game-info i {
+    color: #2196F3;
 }
 
 /* Улучшенные поля ввода */
@@ -1064,82 +1090,29 @@ body {
     color: #aaa;
 }
 
-/* Адаптивность */
-@media (max-width: 1200px) {
-    .game-container {
-        padding: 10px;
-    }
-    
-    .video-container {
-        flex-direction: column;
-        align-items: center;
-    }
-    
-    .video-box {
-        max-width: 100%;
-    }
-    
-    .main-game-area {
-        flex-direction: column;
-        height: auto;
-    }
-    
-    .decks-left, .decks-right {
-        flex-direction: row;
-        width: 100%;
-        justify-content: center;
-    }
-    
-    .deck {
-        width: 150px;
-        height: 120px;
-    }
-    
-    .game-board {
-        height: 500px;
-    }
-    
-    .points-control {
-        flex-direction: column;
-    }
-}
-
-@media (max-width: 768px) {
-    .video-container {
-        flex-direction: column;
-    }
-    
-    .video-box {
-        max-width: 100%;
-        height: 200px;
-    }
-    
-    .role-selection-content {
-        padding: 20px;
-    }
-    
-    .top-panel {
-        flex-direction: column;
-        gap: 20px;
-    }
-    
-    .score-board {
-        flex-direction: column;
-        gap: 20px;
-    }
-    
-    .connection-info-bar {
-        position: relative;
-        top: 0;
-        right: 0;
-        margin-top: 10px;
-        justify-content: center;
-    }
-}
-
 /* Специальные зоны */
 .special-zone-modal {
     animation: fadeIn 0.3s ease-out;
+    font-family: 'Arial', sans-serif;
+}
+
+.special-zone-modal h3 {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.special-zone-modal p {
+    font-size: 18px;
+    margin-bottom: 15px;
+    color: #FFC107;
+}
+
+.special-zone-modal div[style*="background: rgba"] {
+    line-height: 1.6;
+    font-size: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 @keyframes fadeIn {
@@ -1147,28 +1120,13 @@ body {
     to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
-.zone-btn {
-    padding: 12px 24px;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 16px;
-    font-weight: bold;
-    transition: all 0.3s;
+.evaluation-btn {
+    background: #FF9800 !important;
+    margin-top: 20px;
 }
 
-.zone-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-
-.good-btn:hover {
-    background: #388E3C !important;
-}
-
-.bad-btn:hover {
-    background: #d32f2f !important;
+.evaluation-btn:hover:not(:disabled) {
+    background: #F57C00 !important;
 }
 
 /* Исправления для отображения игрового поля */
@@ -1230,11 +1188,152 @@ body {
     }
 }
 
-.evaluation-btn {
-    background: #FF9800 !important;
-    margin-top: 20px;
+/* Адаптивность */
+@media (max-width: 1200px) {
+    .game-container {
+        padding: 10px;
+    }
+    
+    .video-container {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .video-box {
+        max-width: 100%;
+    }
+    
+    .main-game-area {
+        flex-direction: column;
+        height: auto;
+    }
+    
+    .decks-left, .decks-right {
+        flex-direction: row;
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .deck {
+        width: 150px;
+        height: 120px;
+    }
+    
+    .game-board {
+        height: 500px;
+    }
+    
+    .points-control {
+        flex-direction: column;
+    }
+    
+    .connection-info-bar {
+        position: relative;
+        top: 0;
+        right: 0;
+        margin-top: 10px;
+        justify-content: center;
+        width: 100%;
+    }
 }
 
-.evaluation-btn:hover:not(:disabled) {
-    background: #F57C00 !important;
+@media (max-width: 768px) {
+    .video-container {
+        flex-direction: column;
+    }
+    
+    .video-box {
+        max-width: 100%;
+        height: 200px;
+    }
+    
+    .role-selection-content {
+        padding: 20px;
+    }
+    
+    .top-panel {
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    .score-board {
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    .team-score {
+        min-width: 120px;
+        padding: 10px 20px;
+    }
+    
+    .dice {
+        width: 60px;
+        height: 60px;
+        font-size: 28px;
+    }
+    
+    .timer-container {
+        padding: 15px 20px;
+    }
+    
+    #timer {
+        font-size: 36px;
+    }
+    
+    .card-modal {
+        width: 90%;
+        padding: 20px;
+    }
+    
+    .card-content {
+        height: 300px;
+    }
+    
+    .master-panel {
+        padding: 15px;
+    }
+    
+    .points-control {
+        gap: 20px;
+    }
+    
+    .team-control {
+        padding: 15px;
+    }
+    
+    .connection-info-bar {
+        flex-wrap: wrap;
+        justify-content: center;
+        font-size: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .role-selection-content {
+        width: 95%;
+        padding: 15px;
+    }
+    
+    .mode-btn {
+        padding: 15px;
+        gap: 10px;
+    }
+    
+    .mode-btn i {
+        font-size: 24px;
+    }
+    
+    .mode-btn strong {
+        font-size: 16px;
+    }
+    
+    .role-label {
+        padding: 10px;
+        gap: 10px;
+    }
+    
+    .large-input {
+        padding: 12px;
+        font-size: 14px;
+    }
 }
