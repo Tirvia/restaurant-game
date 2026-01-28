@@ -20,6 +20,11 @@ const io = socketIo(server, {
 // Раздаём статические файлы
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Отдельный маршрут для admin.html (он в корневой папке)
+app.get('/admin.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
 // Middleware для парсинга JSON
 app.use(express.json());
 
