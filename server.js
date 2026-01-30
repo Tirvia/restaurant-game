@@ -38,7 +38,7 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     rooms: Array.from(rooms.keys()).length,
     players: Array.from(rooms.values()).reduce((acc, room) => {
-      return acc + (room.player1 ? 1 : 0) + (room.player2 ? 1 : 0) + (room.spectators ? room.spectators.size : 0) + 1;
+      return acc + (room.player1 ? 1 : 0) + (room.player2 ? 1 : 0) + (room.spectators ? room.spectators.size : 0);
     }, 0),
     uptime: process.uptime(),
     finishedGames: finishedGames.length
