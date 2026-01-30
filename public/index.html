@@ -7,6 +7,33 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        /* Дополнительные стили для анимаций */
+        @keyframes firework {
+            0% {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: translateY(-100px) scale(1.5);
+                opacity: 0.8;
+            }
+            100% {
+                transform: translateY(-200px) scale(2);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes slideDown {
+            from { transform: translateX(-50%) translateY(-20px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateX(-50%) translateY(0); opacity: 1; }
+            to { transform: translateX(-50%) translateY(-20px); opacity: 0; }
+        }
+    </style>
 </head>
 <body>
     <div class="game-container">
@@ -34,8 +61,25 @@
             </div>
         </div>
 
-        <!-- Верхняя панель с информацией -->
+        <!-- Верхняя панель с информацией (УМЕНЬШЕНА) -->
         <div class="top-panel">
+            <!-- Информация о подключении в столбик слева -->
+            <div class="connection-info">
+                <div class="connection-status connected">
+                    <i class="fas fa-circle"></i>
+                    <span>Подключено</span>
+                </div>
+                <div class="room-info">
+                    <i class="fas fa-door-closed"></i>
+                    <span>Комната: Нет</span>
+                </div>
+                <div class="player-info">
+                    <i class="fas fa-user"></i>
+                    <span>Игрок (Не выбран)</span>
+                </div>
+            </div>
+            
+            <!-- Счет и кубик по центру -->
             <div class="score-board">
                 <div class="team-score" id="team1-score">
                     <h3 id="team1-name">Команда 1</h3>
@@ -52,6 +96,7 @@
                 </div>
             </div>
             
+            <!-- Таймер справа -->
             <div class="timer-container">
                 <div id="timer">60</div>
                 <div class="timer-label">секунд</div>
@@ -121,65 +166,67 @@
             </div>
         </div>
 
-        <!-- Компактная панель ведущего -->
-<div class="master-panel" id="master-panel">
-    <div class="master-panel-header">
-        <h3><i class="fas fa-crown"></i> Панель ведущего</h3>
-        <button class="close-panel" id="close-panel">&times;</button>
-    </div>
-    
-    <div class="compact-controls">
-        <div class="team-control-row">
-            <div class="team-label" style="color: #2196F3;">
-                <i class="fas fa-user-circle"></i>
-                <span id="master-team1-name">Команда 1</span>
+        <!-- Компактная панель ведущего с круглыми кнопками -->
+        <div class="master-panel" id="master-panel">
+            <div class="master-panel-header">
+                <h3><i class="fas fa-crown"></i> Панель ведущего</h3>
+                <button class="close-panel" id="close-panel">&times;</button>
             </div>
-            <div class="points-control-compact">
-                <div class="points-buttons-row">
-                    <button class="point-btn compact plus-btn" data-points="1" data-team="1" title="+1 очко">+1</button>
-                    <button class="point-btn compact plus-btn" data-points="2" data-team="1" title="+2 очка">+2</button>
-                    <button class="point-btn compact plus-btn" data-points="3" data-team="1" title="+3 очка">+3</button>
-                    <span class="points-separator"></span>
-                    <button class="point-btn compact minus-btn" data-points="-1" data-team="1" title="-1 очко">-1</button>
-                    <button class="point-btn compact minus-btn" data-points="-2" data-team="1" title="-2 очка">-2</button>
-                    <button class="point-btn compact minus-btn" data-points="-3" data-team="1" title="-3 очка">-3</button>
+            
+            <div class="compact-controls">
+                <div class="team-control-row">
+                    <div class="team-label" style="color: #2196F3;">
+                        <i class="fas fa-user-circle"></i>
+                        <span id="master-team1-name">Команда 1: Ожидает</span>
+                    </div>
+                    <div class="points-control-compact">
+                        <div class="points-buttons-row">
+                            <!-- КРУГЛЫЕ КНОПКИ -->
+                            <button class="point-btn compact plus-btn" data-points="1" data-team="1" title="+1 очко">+1</button>
+                            <button class="point-btn compact plus-btn" data-points="2" data-team="1" title="+2 очка">+2</button>
+                            <button class="point-btn compact plus-btn" data-points="3" data-team="1" title="+3 очка">+3</button>
+                            <span class="points-separator"></span>
+                            <button class="point-btn compact minus-btn" data-points="-1" data-team="1" title="-1 очко">-1</button>
+                            <button class="point-btn compact minus-btn" data-points="-2" data-team="1" title="-2 очка">-2</button>
+                            <button class="point-btn compact minus-btn" data-points="-3" data-team="1" title="-3 очка">-3</button>
+                        </div>
+                        <div class="current-selection-compact" id="team1-selection">
+                            <span class="selection-label">Выбрано:</span>
+                            <span class="selection-value">0</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="current-selection-compact" id="team1-selection">
-                    <span class="selection-label">Выбрано:</span>
-                    <span class="selection-value">0</span>
+                
+                <div class="team-control-row">
+                    <div class="team-label" style="color: #FF5722;">
+                        <i class="fas fa-user-circle"></i>
+                        <span id="master-team2-name">Команда 2: Ожидает</span>
+                    </div>
+                    <div class="points-control-compact">
+                        <div class="points-buttons-row">
+                            <!-- КРУГЛЫЕ КНОПКИ (для команды 2 кнопки +3/-3 не скрываем по умолчанию - JS будет управлять) -->
+                            <button class="point-btn compact plus-btn" data-points="1" data-team="2" title="+1 очко">+1</button>
+                            <button class="point-btn compact plus-btn" data-points="2" data-team="2" title="+2 очка">+2</button>
+                            <button class="point-btn compact plus-btn" data-points="3" data-team="2" title="+3 очка">+3</button>
+                            <span class="points-separator"></span>
+                            <button class="point-btn compact minus-btn" data-points="-1" data-team="2" title="-1 очко">-1</button>
+                            <button class="point-btn compact minus-btn" data-points="-2" data-team="2" title="-2 очка">-2</button>
+                            <button class="point-btn compact minus-btn" data-points="-3" data-team="2" title="-3 очка">-3</button>
+                        </div>
+                        <div class="current-selection-compact" id="team2-selection">
+                            <span class="selection-label">Выбрано:</span>
+                            <span class="selection-value">0</span>
+                        </div>
+                    </div>
                 </div>
+            </div>
+            
+            <div class="master-action-row">
+                <button id="next-turn" class="btn next-turn-btn">
+                    <i class="fas fa-arrow-right"></i> Перейти к следующему ходу
+                </button>
             </div>
         </div>
-        
-        <div class="team-control-row">
-            <div class="team-label" style="color: #FF5722;">
-                <i class="fas fa-user-circle"></i>
-                <span id="master-team2-name">Команда 2</span>
-            </div>
-            <div class="points-control-compact">
-                <div class="points-buttons-row">
-                    <button class="point-btn compact plus-btn" data-points="1" data-team="2" title="+1 очко">+1</button>
-                    <button class="point-btn compact plus-btn" data-points="2" data-team="2" title="+2 очка">+2</button>
-                    <button class="point-btn compact plus-btn" data-points="3" data-team="2" title="+3 очка">+3</button>
-                    <span class="points-separator"></span>
-                    <button class="point-btn compact minus-btn" data-points="-1" data-team="2" title="-1 очко">-1</button>
-                    <button class="point-btn compact minus-btn" data-points="-2" data-team="2" title="-2 очка">-2</button>
-                    <button class="point-btn compact minus-btn" data-points="-3" data-team="2" title="-3 очка">-3</button>
-                </div>
-                <div class="current-selection-compact" id="team2-selection">
-                    <span class="selection-label">Выбрано:</span>
-                    <span class="selection-value">0</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="master-action-row">
-        <button id="next-turn" class="btn next-turn-btn">
-            <i class="fas fa-arrow-right"></i> Перейти к следующему ходу
-        </button>
-    </div>
-</div>
 
         <!-- Салюты при победе -->
         <div id="fireworks"></div>
