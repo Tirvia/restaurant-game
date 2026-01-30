@@ -1020,8 +1020,8 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         gramsLabel.textContent = 'Зона граммовки ±2';
-        gramsLabel.style.left = '140px';
-        gramsLabel.style.top = '490px';
+        gramsLabel.style.left = '120px';
+        gramsLabel.style.top = '460px';
         container.appendChild(gramsLabel);
         
         const descLabel = document.createElement('div');
@@ -1062,8 +1062,8 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         allergyLabel.textContent = 'Зона аллергии +1/-5';
-        allergyLabel.style.left = '620px';
-        allergyLabel.style.top = '420px';
+        allergyLabel.style.left = '540px';
+        allergyLabel.style.top = '385px';
         container.appendChild(allergyLabel);
     }
 
