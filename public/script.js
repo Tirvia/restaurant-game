@@ -78,6 +78,9 @@ class Game {
         // Для специальных зон
         this.specialZoneData = null;
         
+        // Инициализация UI компонентов
+        this.connectionInfo = null;
+        
         this.init();
     }
 
@@ -413,6 +416,9 @@ class Game {
             statusDiv.style.background = 'rgba(76, 175, 80, 0.2)';
             statusDiv.style.color = '#4CAF50';
             console.log('✅ Подключено к серверу');
+            
+            // Создаем информационную панель подключения
+            this.createConnectionInfo();
         });
         
         this.socket.on('connect_error', (error) => {
@@ -465,6 +471,9 @@ class Game {
                 modal.remove();
                 this.continueGameInitialization().then(resolve);
             }, 2000);
+            
+            // Обновляем информацию о подключении
+            this.updateConnectionInfo();
         });
         
         this.socket.on('join-success', (data) => {
@@ -491,6 +500,9 @@ class Game {
                 modal.remove();
                 this.continueGameInitialization().then(resolve);
             }, 2000);
+            
+            // Обновляем информацию о подключении
+            this.updateConnectionInfo();
         });
         
         this.socket.on('player-joined', (data) => {
@@ -573,6 +585,11 @@ class Game {
             this.currentQuestionCategory = data.category;
             
             this.showQuestion(data.question, data.category, data.instruction, isAnsweringPlayer);
+            
+            // Запускаем таймер для локальной игры
+            if (this.gameMode === 'local') {
+                this.startTimer();
+            }
         });
         
         this.socket.on('answer-completed-by-player', () => {
@@ -678,8 +695,12 @@ class Game {
             console.log('⏰ Время вышло!');
             this.waitingForAnswer = false;
             
-            if ((this.role === 'player1' && this.currentPlayer === 1) || 
-                (this.role === 'player2' && this.currentPlayer === 2)) {
+            // Автоматически закрываем карточку для отвечающего игрока
+            const isAnsweringPlayer = (this.role === 'player1' && this.currentPlayer === 1) || 
+                                     (this.role === 'player2' && this.currentPlayer === 2);
+            
+            if (isAnsweringPlayer) {
+                this.hideCard();
                 this.answerCompleted = true;
                 if (this.socket && this.isConnected) {
                     this.socket.emit('answer-completed');
@@ -687,6 +708,10 @@ class Game {
             }
             
             this.showNotification('Время вышло!', 'warning');
+        });
+        
+        this.socket.on('hide-card', () => {
+            this.hideCard();
         });
         
         this.socket.on('game-over', (data) => {
@@ -720,6 +745,53 @@ class Game {
                 roomStatus.className = 'room-status not-found';
             }
         });
+    }
+
+    createConnectionInfo() {
+        // Создаем информационную панель подключения
+        this.connectionInfo = document.createElement('div');
+        this.connectionInfo.className = 'connection-info';
+        this.connectionInfo.innerHTML = `
+            <div class="connection-status ${this.isConnected ? 'connected' : 'disconnected'}">
+                <i class="fas fa-circle"></i>
+                <span>${this.isConnected ? 'Подключено' : 'Не подключено'}</span>
+            </div>
+            <div class="room-info">
+                <i class="fas fa-door-closed"></i>
+                <span>Комната: ${this.roomCode || 'Нет'}</span>
+            </div>
+            <div class="player-info">
+                <i class="fas fa-user"></i>
+                <span>${this.playerName} (${this.getRoleName()})</span>
+            </div>
+        `;
+        
+        const topPanel = document.querySelector('.top-panel');
+        if (topPanel) {
+            topPanel.appendChild(this.connectionInfo);
+        }
+    }
+
+    updateConnectionInfo() {
+        if (!this.connectionInfo) return;
+        
+        const connectionStatus = this.connectionInfo.querySelector('.connection-status');
+        const roomInfo = this.connectionInfo.querySelector('.room-info span');
+        const playerInfo = this.connectionInfo.querySelector('.player-info span');
+        
+        if (connectionStatus) {
+            connectionStatus.className = `connection-status ${this.isConnected ? 'connected' : 'disconnected'}`;
+            connectionStatus.querySelector('i').className = `fas fa-circle`;
+            connectionStatus.querySelector('span').textContent = this.isConnected ? 'Подключено' : 'Не подключено';
+        }
+        
+        if (roomInfo) {
+            roomInfo.textContent = `Комната: ${this.roomCode || 'Нет'}`;
+        }
+        
+        if (playerInfo) {
+            playerInfo.textContent = `${this.playerName} (${this.getRoleName()})`;
+        }
     }
 
     getRoleNameFromType(roleType) {
@@ -1461,20 +1533,31 @@ class Game {
     stopTimerAndCloseCard() {
         console.log('⏱️ Таймер остановлен, закрываем карточку');
         clearInterval(this.timerInterval);
-        this.hideCard();
+        
+        // Для локальной игры или онлайн-игры как отвечающий игрок
+        const isAnsweringPlayer = (this.role === 'player1' && this.currentPlayer === 1) || 
+                                 (this.role === 'player2' && this.currentPlayer === 2);
         
         if (this.gameMode === 'online') {
-            if (this.role === 'master') {
-                this.showMasterPanel();
-            } else if ((this.role === 'player1' && this.currentPlayer === 1) || 
-                       (this.role === 'player2' && this.currentPlayer === 2)) {
+            if (isAnsweringPlayer) {
+                // Отправляем серверу, что ответ завершен по таймеру
                 this.answerCompleted = true;
                 if (this.socket && this.isConnected) {
                     this.socket.emit('answer-completed');
                 }
             }
         } else {
-            this.showMasterPanel();
+            // Для локальной игры
+            this.answerCompleted = true;
+        }
+        
+        this.hideCard();
+        
+        // Для локальной игры или ведущего показываем панель оценки
+        if (this.gameMode === 'local' || this.role === 'master') {
+            setTimeout(() => {
+                this.showMasterPanel();
+            }, 500);
         }
     }
 
@@ -1505,6 +1588,9 @@ class Game {
                 panel.style.opacity = '1';
                 panel.style.transform = 'translateX(-50%) translateY(0)';
             });
+            
+            // Обновляем видимость кнопок
+            this.updateMasterPanelButtons();
         }
         
         this.showNotification('Оцените ответ команд и нажмите "Следующий ход"', 'info');
@@ -1585,6 +1671,38 @@ class Game {
         this.updateSelectionDisplay(team);
     }
 
+    updateMasterPanelButtons() {
+        const activeTeam = this.currentPlayer;
+        const inactiveTeam = activeTeam === 1 ? 2 : 1;
+        
+        // Показываем все кнопки для активной команды
+        document.querySelectorAll(`.point-btn.compact[data-team="${activeTeam}"]`).forEach(btn => {
+            btn.classList.remove('hidden');
+        });
+        
+        // Скрываем кнопки +3 и -3 для неактивной команды
+        document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="3"]`).forEach(btn => {
+            btn.classList.add('hidden');
+        });
+        document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="-3"]`).forEach(btn => {
+            btn.classList.add('hidden');
+        });
+        
+        // Показываем остальные кнопки для неактивной команды
+        document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="1"]`).forEach(btn => {
+            btn.classList.remove('hidden');
+        });
+        document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="2"]`).forEach(btn => {
+            btn.classList.remove('hidden');
+        });
+        document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="-1"]`).forEach(btn => {
+            btn.classList.remove('hidden');
+        });
+        document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="-2"]`).forEach(btn => {
+            btn.classList.remove('hidden');
+        });
+    }
+
     nextTurn() {
         if (this.gameMode === 'online' && this.role !== 'master') {
             alert('Только ведущий может переходить к следующему ходу!');
@@ -1596,12 +1714,12 @@ class Game {
             return;
         }
         
-        // Применяем выбранные очки
+        // Применяем выбранные очки и двигаем фишки
         for (let team of [1, 2]) {
             const points = this.selectedPoints[team];
             if (points !== 0) {
-                this.scores[team] += points;
-                this.movePiece(team, points);
+                this.scores[team] += points; // Начисляем очки здесь
+                this.movePiece(team, points, false); // false = не специальная зона
             }
         }
         
@@ -1651,10 +1769,10 @@ class Game {
         this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
     }
 
-    movePiece(team, points) {
+    movePiece(team, points, isSpecialZone = false) {
         if (this.animationInProgress) {
             console.log('Анимация уже выполняется, ждем...');
-            setTimeout(() => this.movePiece(team, points), 100);
+            setTimeout(() => this.movePiece(team, points, isSpecialZone), 100);
             return;
         }
         
@@ -1670,20 +1788,24 @@ class Game {
         
         this.animationInProgress = true;
         
-        if (delta > 0) {
-            this.scores[team] += delta;
-        } else if (delta < 0) {
-            this.scores[team] += delta;
+        // ТОЛЬКО для специальных зон начисляем очки в movePiece
+        // Для обычных ходов очки начисляются в nextTurn
+        if (isSpecialZone) {
+            if (delta > 0) {
+                this.scores[team] += delta;
+            } else if (delta < 0) {
+                this.scores[team] += delta; // Отрицательное число отнимает очки
+            }
         }
         
-        this.animatePieceMovement(team, this.positions[team], newPosition, () => {
-            this.positions[team] = newPosition;
+        this.positions[team] = newPosition;
+        
+        this.updateScores();
+        this.animatePieceMovement(team, this.positions[team] - delta, newPosition, () => {
             this.animationInProgress = false;
-            
-            this.updateScores();
             this.updatePieces();
             
-            if (Math.abs(points) <= 6) {
+            if (Math.abs(points) <= 6 && !isSpecialZone) {
                 this.checkSpecialZone(team, newPosition);
             }
             
@@ -1700,7 +1822,7 @@ class Game {
                 };
                 this.socket.emit('update-game', gameState);
                 
-                if (Math.abs(points) <= 6) {
+                if (Math.abs(points) <= 6 && !isSpecialZone) {
                     this.socket.emit('check-special-zone', { team, position: newPosition });
                 }
             }
@@ -1716,50 +1838,44 @@ class Game {
         }
         
         const positions = this.generateBoardPositions();
-        const stepDelay = 200;
+        const steps = Math.abs(toPosition - fromPosition);
         const direction = toPosition > fromPosition ? 1 : -1;
-        let currentStep = fromPosition;
         
-        const shouldAnimate = Math.abs(toPosition - fromPosition) <= 10;
-        
-        if (!shouldAnimate) {
-            if (positions[toPosition]) {
-                piece.style.left = (positions[toPosition].x + 5) + 'px';
-                piece.style.top = (positions[toPosition].y + 5) + 'px';
-            }
+        if (steps === 0) {
             this.animationInProgress = false;
             if (callback) callback();
             return;
         }
         
-        const moveStep = () => {
-            if ((direction > 0 && currentStep >= toPosition) || 
-                (direction < 0 && currentStep <= toPosition)) {
+        let currentStep = 0;
+        
+        const moveNext = () => {
+            if (currentStep >= steps) {
                 this.animationInProgress = false;
                 if (callback) callback();
                 return;
             }
             
-            currentStep += direction;
+            currentStep++;
+            const nextPosition = fromPosition + (direction * currentStep);
             
-            if (positions[currentStep]) {
-                const targetX = positions[currentStep].x + 5;
-                const targetY = positions[currentStep].y + 5;
-                
-                piece.style.transition = `left ${stepDelay}ms ease-out, top ${stepDelay}ms ease-out`;
-                piece.style.left = targetX + 'px';
-                piece.style.top = targetY + 'px';
+            if (positions[nextPosition]) {
+                piece.style.transition = `left 300ms ease-out, top 300ms ease-out`;
+                piece.style.left = (positions[nextPosition].x + 5) + 'px';
+                piece.style.top = (positions[nextPosition].y + 5) + 'px';
                 
                 piece.classList.add('moving');
                 setTimeout(() => {
                     piece.classList.remove('moving');
-                }, stepDelay);
+                    setTimeout(moveNext, 100); // Пауза между шагами
+                }, 300);
+            } else {
+                setTimeout(moveNext, 50);
             }
-            
-            setTimeout(moveStep, stepDelay);
         };
         
-        moveStep();
+        // Начинаем движение с небольшой задержкой
+        setTimeout(moveNext, 100);
     }
 
     checkSpecialZone(team, position) {
@@ -1779,13 +1895,17 @@ class Game {
         if (zoneType && !this.triggeredZonesInTurn[team].has(zoneType)) {
             this.triggeredZonesInTurn[team].add(zoneType);
             
+            // Добавляем зону в очередь с приоритетом (активная команда первой)
+            const priority = team === this.currentPlayer ? 1 : 2;
+            
             this.specialZoneQueue.push({
                 team: team,
                 zoneType: zoneType,
                 position: position,
-                priority: team === this.currentPlayer ? 1 : 2
+                priority: priority
             });
             
+            // Сортируем по приоритету (активная команда первой)
             this.specialZoneQueue.sort((a, b) => a.priority - b.priority);
 
             if (!this.showingSpecialZone && !this.isSpecialZoneActive) {
@@ -1813,11 +1933,10 @@ class Game {
             negative: zoneSettings.negative
         };
         
+        this.isSpecialZoneActive = true;
+        
         if (this.gameMode === 'online' && this.socket && this.isConnected) {
-            this.socket.emit('special-zone', {
-                roomCode: this.roomCode,
-                ...this.specialZoneData
-            });
+            this.socket.emit('special-zone', this.specialZoneData);
         } else {
             this.showSpecialZoneModal(this.specialZoneData);
         }
@@ -1882,7 +2001,7 @@ class Game {
         if (isMaster) {
             modal.querySelector('#special-correct').addEventListener('click', () => {
                 const points = data.positive;
-                this.movePiece(data.team, points);
+                this.movePiece(data.team, points, true);
                 
                 if (this.gameMode === 'online' && this.socket && this.isConnected) {
                     this.socket.emit('special-zone-result', {
@@ -1899,13 +2018,13 @@ class Game {
                     this.showingSpecialZone = false;
                     this.isSpecialZoneActive = false;
                     
-                    setTimeout(() => this.showNextSpecialZone(), 300);
+                    setTimeout(() => this.showNextSpecialZone(), 500);
                 }, 300);
             });
 
             modal.querySelector('#special-incorrect').addEventListener('click', () => {
                 const points = data.negative;
-                this.movePiece(data.team, points);
+                this.movePiece(data.team, points, true);
                 
                 if (this.gameMode === 'online' && this.socket && this.isConnected) {
                     this.socket.emit('special-zone-result', {
@@ -1922,7 +2041,7 @@ class Game {
                     this.showingSpecialZone = false;
                     this.isSpecialZoneActive = false;
                     
-                    setTimeout(() => this.showNextSpecialZone(), 300);
+                    setTimeout(() => this.showNextSpecialZone(), 500);
                 }, 300);
             });
         }
@@ -2000,6 +2119,11 @@ class Game {
                 videoTeam.style.borderColor = '#FF5722';
                 videoTeam.style.boxShadow = '0 0 20px rgba(255, 87, 34, 0.5)';
             }
+        }
+        
+        // Обновляем кнопки на панели ведущего
+        if (this.role === 'master' || this.gameMode === 'local') {
+            this.updateMasterPanelButtons();
         }
     }
 
@@ -2090,28 +2214,9 @@ class Game {
 
         this.updateRollButton();
 
+        // Создаем информационную панель подключения для онлайн-игры
         if (this.gameMode === 'online') {
-            const connectionInfo = document.createElement('div');
-            connectionInfo.className = 'connection-info-bar';
-            connectionInfo.innerHTML = `
-                <div class="connection-status ${this.isConnected ? 'connected' : 'disconnected'}">
-                    <i class="fas fa-circle"></i>
-                    <span>${this.isConnected ? 'Подключено' : 'Не подключено'}</span>
-                </div>
-                <div class="room-info-bar">
-                    <i class="fas fa-door-closed"></i>
-                    <span>Комната: ${this.roomCode || 'Нет'}</span>
-                </div>
-                <div class="player-info-bar">
-                    <i class="fas fa-user"></i>
-                    <span>${this.playerName} (${this.getRoleName()})</span>
-                </div>
-            `;
-
-            const topPanel = document.querySelector('.top-panel');
-            if (topPanel) {
-                topPanel.appendChild(connectionInfo);
-            }
+            this.createConnectionInfo();
         }
     }
 
