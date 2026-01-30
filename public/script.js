@@ -25,6 +25,7 @@ class Game {
         this.specialZoneQueue = [];
         this.showingSpecialZone = false;
         this.isSpecialZoneActive = false;
+        this.animationInProgress = false;
         
         this.triggeredZonesInTurn = {
             1: new Set(),
@@ -175,9 +176,6 @@ class Game {
     setupLocalInterface() {
         const videoContainer = document.querySelector('.video-container');
         if (videoContainer) videoContainer.style.display = 'none';
-        
-        const panel = document.getElementById('master-panel');
-        if (panel) panel.style.display = 'block';
         
         this.updateRollButton();
     }
@@ -428,7 +426,6 @@ class Game {
             statusText.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${data.message}`;
             alert(data.message);
             
-            // Предлагаем присоединиться как наблюдатель
             if (data.availableRoles.includes('spectator')) {
                 if (confirm('Хотите присоединиться как наблюдатель?')) {
                     this.role = 'spectator';
@@ -481,9 +478,9 @@ class Game {
                 this.scores = data.gameState.scores || this.scores;
                 this.positions = data.gameState.positions || this.positions;
                 this.diceResult = data.gameState.diceResult || 0;
+                this.isSpecialZoneActive = data.gameState.isSpecialZoneActive || false;
             }
             
-            // Сохраняем имена игроков
             if (data.players) {
                 this.updatePlayers(data.players);
             }
@@ -499,7 +496,6 @@ class Game {
         this.socket.on('player-joined', (data) => {
             this.showNotification(`${data.playerName} присоединился как ${this.getRoleNameFromType(data.role)}`, 'info');
             
-            // Обновляем имена игроков
             if (data.players) {
                 this.updatePlayers(data.players);
             }
@@ -512,13 +508,13 @@ class Game {
                 this.players.player1 = '';
                 document.querySelector('#video-team1 .video-placeholder p').textContent = 'Команда 1';
                 document.querySelector('#team1-name').textContent = 'Команда 1';
-                document.querySelector('#master-team1-name').textContent = 'Команда 1';
             } else if (data.role === 'player2') {
                 this.players.player2 = '';
                 document.querySelector('#video-team2 .video-placeholder p').textContent = 'Команда 2';
                 document.querySelector('#team2-name').textContent = 'Команда 2';
-                document.querySelector('#master-team2-name').textContent = 'Команда 2';
             }
+            
+            this.updateMasterPanelNames();
         });
         
         this.socket.on('spectator-joined', (data) => {
@@ -610,26 +606,32 @@ class Game {
         this.socket.on('special-zone-result', (data) => {
             console.log('🎯 Результат специальной зоны:', data);
             
-            // Обновляем позицию и очки
+            const modal = document.querySelector('.special-zone-modal');
+            if (modal) {
+                modal.style.animation = 'modalSlideOut 0.3s ease-out';
+                setTimeout(() => modal.remove(), 300);
+            }
+            
             this.positions[data.team] = data.newPosition;
             this.scores[data.team] = data.scores[data.team];
             
             this.updateScores();
             this.updatePieces();
             this.isSpecialZoneActive = false;
+            this.specialZoneData = null;
+            
+            this.showNotification(`Команда ${data.team} получила ${data.points > 0 ? '+' : ''}${data.points} очков!`, 'info');
         });
         
         this.socket.on('special-zone-closed', () => {
-            console.log('🎯 Специальная зона закрыта');
+            console.log('🎯 Специальная зона закрыта на сервере');
             const modal = document.querySelector('.special-zone-modal');
-            if (modal) modal.remove();
+            if (modal) {
+                modal.style.animation = 'modalSlideOut 0.3s ease-out';
+                setTimeout(() => modal.remove(), 300);
+            }
             this.specialZoneData = null;
             this.isSpecialZoneActive = false;
-            
-            // Проверяем следующую зону в очереди
-            if (this.specialZoneQueue.length > 0 && !this.showingSpecialZone) {
-                setTimeout(() => this.showNextSpecialZone(), 500);
-            }
         });
         
         this.socket.on('game-updated', (gameState) => {
@@ -836,13 +838,13 @@ class Game {
     }
 
     updateVideoPlaceholders() {
-        // Обновляем мастер
+        if (this.gameMode === 'local') return;
+
         const masterPlaceholder = document.querySelector('#video-master .video-placeholder p');
         if (masterPlaceholder && this.players.master) {
             masterPlaceholder.innerHTML = `<i class="fas fa-crown"></i> Ведущий: ${this.players.master}`;
         }
 
-        // Обновляем игрока 1
         const player1Placeholder = document.querySelector('#video-team1 .video-placeholder p');
         const player1Score = document.querySelector('#team1-name');
         if (this.players.player1) {
@@ -854,7 +856,6 @@ class Game {
             }
         }
 
-        // Обновляем игрока 2
         const player2Placeholder = document.querySelector('#video-team2 .video-placeholder p');
         const player2Score = document.querySelector('#team2-name');
         if (this.players.player2) {
@@ -1020,8 +1021,8 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         gramsLabel.textContent = 'Зона граммовки ±2';
-        gramsLabel.style.left = '120px';
-        gramsLabel.style.top = '460px';
+        gramsLabel.style.left = '140px';
+        gramsLabel.style.top = '490px';
         container.appendChild(gramsLabel);
         
         const descLabel = document.createElement('div');
@@ -1062,8 +1063,8 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         allergyLabel.textContent = 'Зона аллергии +1/-5';
-        allergyLabel.style.left = '540px';
-        allergyLabel.style.top = '385px';
+        allergyLabel.style.left = '620px';
+        allergyLabel.style.top = '420px';
         container.appendChild(allergyLabel);
     }
 
@@ -1214,7 +1215,7 @@ class Game {
         if (answerBtn) answerBtn.style.display = 'none';
         if (masterBtn) masterBtn.style.display = 'none';
         
-        document.querySelectorAll('.point-btn').forEach(btn => {
+        document.querySelectorAll('.point-btn.compact').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 if (this.gameMode === 'online' && this.role !== 'master') return;
                 if (this.gameMode === 'local' && this.role !== 'local') return;
@@ -1229,6 +1230,14 @@ class Game {
         const nextTurnBtn = document.getElementById('next-turn');
         if (nextTurnBtn) {
             nextTurnBtn.addEventListener('click', () => this.nextTurn());
+        }
+        
+        const closePanelBtn = document.getElementById('close-panel');
+        if (closePanelBtn) {
+            closePanelBtn.addEventListener('click', () => {
+                this.hideMasterPanel();
+                this.resetSelection();
+            });
         }
         
         window.addEventListener('resize', () => this.drawBoard());
@@ -1487,9 +1496,33 @@ class Game {
         const panel = document.getElementById('master-panel');
         if (panel) {
             panel.style.display = 'block';
+            // Плавное появление
+            panel.style.opacity = '0';
+            panel.style.transform = 'translateX(-50%) translateY(20px)';
+            
+            requestAnimationFrame(() => {
+                panel.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+                panel.style.opacity = '1';
+                panel.style.transform = 'translateX(-50%) translateY(0)';
+            });
         }
         
-        this.showNotification('Оцените ответ команд и примените очки', 'info');
+        this.showNotification('Оцените ответ команд и нажмите "Следующий ход"', 'info');
+    }
+
+    hideMasterPanel() {
+        const panel = document.getElementById('master-panel');
+        if (panel) {
+            panel.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+            panel.style.opacity = '0';
+            panel.style.transform = 'translateX(-50%) translateY(20px)';
+            
+            setTimeout(() => {
+                panel.style.display = 'none';
+                panel.style.opacity = '1';
+                panel.style.transform = 'translateX(-50%) translateY(0)';
+            }, 300);
+        }
     }
 
     resetSelection() {
@@ -1501,7 +1534,7 @@ class Game {
         this.updateSelectionDisplay(2);
 
         if (this.gameMode === 'local' || this.role === 'master') {
-            document.querySelectorAll('.point-btn').forEach(btn => {
+            document.querySelectorAll('.point-btn.compact').forEach(btn => {
                 btn.classList.remove('selected');
                 btn.disabled = false;
             });
@@ -1509,7 +1542,7 @@ class Game {
             const nextTurnBtn = document.getElementById('next-turn');
             if (nextTurnBtn) nextTurnBtn.disabled = false;
         } else {
-            document.querySelectorAll('.point-btn').forEach(btn => {
+            document.querySelectorAll('.point-btn.compact').forEach(btn => {
                 btn.classList.remove('selected');
                 btn.disabled = true;
             });
@@ -1524,16 +1557,18 @@ class Game {
         if (!element) return;
         
         const points = this.selectedPoints[team];
-        element.innerHTML = points === 0 
-            ? 'Выбрано: <span>0 очков</span>'
-            : `Выбрано: <span>${points > 0 ? '+' : ''}${points} очков</span>`;
+        const valueElement = element.querySelector('.selection-value');
+        if (valueElement) {
+            valueElement.textContent = points === 0 ? '0' : (points > 0 ? '+' : '') + points;
+            valueElement.style.color = points > 0 ? '#4CAF50' : points < 0 ? '#F44336' : '#FFC107';
+        }
     }
 
     selectPoints(team, points) {
         if (this.gameMode === 'online' && this.role !== 'master') return;
         if (this.gameMode === 'local' && this.role !== 'local') return;
         
-        document.querySelectorAll(`.point-btn[data-team="${team}"]`).forEach(btn => {
+        document.querySelectorAll(`.point-btn.compact[data-team="${team}"]`).forEach(btn => {
             btn.classList.remove('selected');
         });
         
@@ -1541,7 +1576,10 @@ class Game {
             this.selectedPoints[team] = 0;
         } else {
             this.selectedPoints[team] = points;
-            document.querySelector(`.point-btn[data-team="${team}"][data-points="${points}"]`)?.classList.add('selected');
+            const selectedBtn = document.querySelector(`.point-btn.compact[data-team="${team}"][data-points="${points}"]`);
+            if (selectedBtn) {
+                selectedBtn.classList.add('selected');
+            }
         }
         
         this.updateSelectionDisplay(team);
@@ -1576,9 +1614,14 @@ class Game {
             });
         }
         
-        const panel = document.getElementById('master-panel');
-        if (panel) panel.style.display = 'none';
+        // Скрываем панель ведущего
+        this.hideMasterPanel();
         
+        // Сбрасываем состояния
+        this.resetForNextTurn();
+    }
+
+    resetForNextTurn() {
         this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
         this.specialZoneQueue = [];
         this.showingSpecialZone = false;
@@ -1609,28 +1652,41 @@ class Game {
     }
 
     movePiece(team, points) {
+        if (this.animationInProgress) {
+            console.log('Анимация уже выполняется, ждем...');
+            setTimeout(() => this.movePiece(team, points), 100);
+            return;
+        }
+        
         const piece = document.getElementById(`piece${team}`);
         if (!piece) return;
         
         const newPosition = Math.max(0, Math.min(this.positions[team] + points, 40));
         const delta = newPosition - this.positions[team];
         
-        // Обновляем очки с учетом движения (вперед - плюс, назад - минус)
+        if (delta === 0) {
+            return;
+        }
+        
+        this.animationInProgress = true;
+        
         if (delta > 0) {
             this.scores[team] += delta;
         } else if (delta < 0) {
-            this.scores[team] += delta; // Отрицательное число отнимает очки
+            this.scores[team] += delta;
         }
         
         this.animatePieceMovement(team, this.positions[team], newPosition, () => {
             this.positions[team] = newPosition;
+            this.animationInProgress = false;
             
-            // Проверяем специальную зону
+            this.updateScores();
+            this.updatePieces();
+            
             if (Math.abs(points) <= 6) {
                 this.checkSpecialZone(team, newPosition);
             }
             
-            // Проверяем победу
             if (newPosition >= 40) {
                 const winnerName = team === 1 ? this.players.player1 : this.players.player2;
                 this.showWinner(team, winnerName, `🎉 Победила команда ${team} (${winnerName})!`);
@@ -1644,24 +1700,42 @@ class Game {
                 };
                 this.socket.emit('update-game', gameState);
                 
-                // Проверяем специальную зону на сервере
-                this.socket.emit('check-special-zone', { team, position: newPosition });
+                if (Math.abs(points) <= 6) {
+                    this.socket.emit('check-special-zone', { team, position: newPosition });
+                }
             }
         });
     }
 
     animatePieceMovement(team, fromPosition, toPosition, callback) {
         const piece = document.getElementById(`piece${team}`);
-        if (!piece) return;
+        if (!piece) {
+            this.animationInProgress = false;
+            if (callback) callback();
+            return;
+        }
         
         const positions = this.generateBoardPositions();
-        const stepDelay = 300;
+        const stepDelay = 200;
         const direction = toPosition > fromPosition ? 1 : -1;
         let currentStep = fromPosition;
+        
+        const shouldAnimate = Math.abs(toPosition - fromPosition) <= 10;
+        
+        if (!shouldAnimate) {
+            if (positions[toPosition]) {
+                piece.style.left = (positions[toPosition].x + 5) + 'px';
+                piece.style.top = (positions[toPosition].y + 5) + 'px';
+            }
+            this.animationInProgress = false;
+            if (callback) callback();
+            return;
+        }
         
         const moveStep = () => {
             if ((direction > 0 && currentStep >= toPosition) || 
                 (direction < 0 && currentStep <= toPosition)) {
+                this.animationInProgress = false;
                 if (callback) callback();
                 return;
             }
@@ -1669,13 +1743,17 @@ class Game {
             currentStep += direction;
             
             if (positions[currentStep]) {
-                piece.style.left = (positions[currentStep].x + 5) + 'px';
-                piece.style.top = (positions[currentStep].y + 5) + 'px';
-                piece.classList.add('moving');
+                const targetX = positions[currentStep].x + 5;
+                const targetY = positions[currentStep].y + 5;
                 
+                piece.style.transition = `left ${stepDelay}ms ease-out, top ${stepDelay}ms ease-out`;
+                piece.style.left = targetX + 'px';
+                piece.style.top = targetY + 'px';
+                
+                piece.classList.add('moving');
                 setTimeout(() => {
                     piece.classList.remove('moving');
-                }, 200);
+                }, stepDelay);
             }
             
             setTimeout(moveStep, stepDelay);
@@ -1746,6 +1824,9 @@ class Game {
     }
 
     showSpecialZoneModal(data) {
+        const existingModal = document.querySelector('.special-zone-modal');
+        if (existingModal) existingModal.remove();
+        
         const modal = document.createElement('div');
         modal.className = 'special-zone-modal';
         modal.style.cssText = `
@@ -1755,12 +1836,13 @@ class Game {
             transform: translate(-50%, -50%);
             width: 500px;
             background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
-            border-radius: 20px;
-            padding: 30px;
+            border-radius: 15px;
+            padding: 25px;
             color: white;
             z-index: 1001;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            border: 5px solid ${this.getZoneColor(data.zoneType)};
+            border: 4px solid ${this.getZoneColor(data.zoneType)};
+            animation: modalSlideIn 0.3s ease-out;
         `;
         
         const isMaster = this.gameMode === 'local' || this.role === 'master';
@@ -1769,27 +1851,28 @@ class Game {
             (this.gameMode === 'online' ? `Команда 2: ${this.players.player2 || ''}` : 'Команда 2');
         
         modal.innerHTML = `
-            <h3 style="color: ${this.getZoneColor(data.zoneType)}; margin-bottom: 20px; text-align: center;">
-                ${data.zoneName}
-            </h3>
-            <p style="font-size: 18px; margin-bottom: 15px; text-align: center;">
-                Вопрос для ${teamName}
-            </p>
-            <div style="font-size: 16px; margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 10px;">
+            <div class="zone-modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="color: ${this.getZoneColor(data.zoneType)}; margin: 0; font-size: 20px;">
+                    <i class="fas fa-star"></i> ${data.zoneName}
+                </h3>
+                <span style="color: #aaa; font-size: 14px;">${teamName}</span>
+            </div>
+            <div style="font-size: 16px; margin: 20px 0; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 10px; line-height: 1.5;">
                 ${data.question}
             </div>
             ${isMaster ? `
-            <div style="text-align: center; margin-top: 30px;">
-                <button id="special-correct" class="btn" style="background: #4CAF50; margin-right: 20px;">
-                    Верно (+${data.positive})
+            <div style="text-align: center; margin-top: 25px;">
+                <button id="special-correct" class="btn special-zone-btn" style="background: #4CAF50; margin-right: 15px; padding: 10px 20px;">
+                    <i class="fas fa-check"></i> Верно (+${data.positive})
                 </button>
-                <button id="special-incorrect" class="btn" style="background: #f44336;">
-                    Неверно (${data.negative})
+                <button id="special-incorrect" class="btn special-zone-btn" style="background: #f44336; padding: 10px 20px;">
+                    <i class="fas fa-times"></i> Неверно (${data.negative})
                 </button>
             </div>
             ` : `
-            <div style="text-align: center; margin-top: 30px; color: #aaa;">
-                <i class="fas fa-clock"></i> Ожидайте оценки ведущего
+            <div style="text-align: center; margin-top: 25px; padding: 15px; background: rgba(255, 193, 7, 0.1); border-radius: 10px;">
+                <i class="fas fa-clock fa-spin" style="color: #FFC107; font-size: 24px; margin-bottom: 10px; display: block;"></i>
+                <p style="color: #FFC107; margin: 0; font-size: 14px;">Ожидайте оценки ведущего...</p>
             </div>
             `}
         `;
@@ -1809,11 +1892,15 @@ class Game {
                     });
                 }
                 
-                modal.remove();
-                this.specialZoneData = null;
-                this.showingSpecialZone = false;
-                this.isSpecialZoneActive = false;
-                setTimeout(() => this.showNextSpecialZone(), 500);
+                modal.style.animation = 'modalSlideOut 0.3s ease-out';
+                setTimeout(() => {
+                    modal.remove();
+                    this.specialZoneData = null;
+                    this.showingSpecialZone = false;
+                    this.isSpecialZoneActive = false;
+                    
+                    setTimeout(() => this.showNextSpecialZone(), 300);
+                }, 300);
             });
 
             modal.querySelector('#special-incorrect').addEventListener('click', () => {
@@ -1828,11 +1915,15 @@ class Game {
                     });
                 }
                 
-                modal.remove();
-                this.specialZoneData = null;
-                this.showingSpecialZone = false;
-                this.isSpecialZoneActive = false;
-                setTimeout(() => this.showNextSpecialZone(), 500);
+                modal.style.animation = 'modalSlideOut 0.3s ease-out';
+                setTimeout(() => {
+                    modal.remove();
+                    this.specialZoneData = null;
+                    this.showingSpecialZone = false;
+                    this.isSpecialZoneActive = false;
+                    
+                    setTimeout(() => this.showNextSpecialZone(), 300);
+                }, 300);
             });
         }
     }
@@ -1891,7 +1982,6 @@ class Game {
         if (teamScore) teamScore.classList.add('current-turn');
         if (turnIndicator) turnIndicator.style.display = 'block';
         
-        // Устанавливаем цвет подсветки в соответствии с цветом команды
         if (teamScore) {
             if (currentTeam === 1) {
                 teamScore.style.borderColor = '#2196F3';
@@ -1969,12 +2059,12 @@ class Game {
         if (panel) {
             if (isMaster || this.gameMode === 'local') {
                 panel.style.display = 'block';
+                this.hideMasterPanel(); // Скрываем по умолчанию
             } else {
                 panel.style.display = 'none';
             }
         }
 
-        // Скрываем кнопки для наблюдателей
         if (isSpectator) {
             const rollBtn = document.getElementById('roll-dice');
             if (rollBtn) rollBtn.style.display = 'none';
@@ -1988,7 +2078,7 @@ class Game {
             const nextTurnBtn = document.getElementById('next-turn');
             if (nextTurnBtn) nextTurnBtn.style.display = 'none';
             
-            document.querySelectorAll('.point-btn').forEach(btn => {
+            document.querySelectorAll('.point-btn.compact').forEach(btn => {
                 btn.style.display = 'none';
             });
         }
@@ -2037,7 +2127,6 @@ class Game {
     }
 
     showWinner(team, winnerName, message) {
-        // Создаем красивое поздравление
         const winnerModal = document.createElement('div');
         winnerModal.className = 'winner-modal';
         winnerModal.style.cssText = `
@@ -2046,7 +2135,7 @@ class Game {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.9);
+            background: rgba(0, 0, 0, 0.95);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -2108,10 +2197,8 @@ class Game {
         
         document.body.appendChild(winnerModal);
         
-        // Запускаем салюты
         this.startFireworks(teamColor);
         
-        // Добавляем обработчик закрытия
         winnerModal.querySelector('#close-winner').addEventListener('click', () => {
             winnerModal.remove();
             const fireworks = document.getElementById('fireworks');
@@ -2121,7 +2208,6 @@ class Game {
             }
         });
         
-        // Автоматическое закрытие через 10 секунд
         setTimeout(() => {
             if (winnerModal.parentNode) {
                 winnerModal.remove();
