@@ -20,7 +20,7 @@
         }
 
         .admin-container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -78,6 +78,33 @@
             color: white;
         }
 
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: #333;
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: #4CAF50;
+        }
+
+        .tab:hover:not(.active) {
+            background: #444;
+        }
+
         .rooms-list {
             background: #2a2a2a;
             border-radius: 10px;
@@ -98,7 +125,7 @@
             padding: 15px 20px;
             border-bottom: 1px solid #444;
             display: grid;
-            grid-template-columns: 100px 150px 150px 150px 150px 150px auto;
+            grid-template-columns: 100px 120px 150px 150px 150px 150px 150px auto;
             gap: 15px;
             align-items: center;
         }
@@ -116,6 +143,24 @@
             color: #4CAF50;
             font-family: monospace;
             font-size: 18px;
+        }
+
+        .game-mode {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .game-mode.online {
+            background: rgba(33, 150, 243, 0.2);
+            color: #2196F3;
+        }
+
+        .game-mode.local {
+            background: rgba(156, 39, 176, 0.2);
+            color: #9C27B0;
         }
 
         .player-status {
@@ -152,6 +197,31 @@
         .game-status.waiting {
             background: rgba(255, 193, 7, 0.2);
             color: #FFC107;
+        }
+
+        .game-status.finished {
+            background: rgba(156, 39, 176, 0.2);
+            color: #9C27B0;
+        }
+
+        .winner-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            background: rgba(255, 193, 7, 0.2);
+            color: #FFC107;
+        }
+
+        .winner-badge.team1 {
+            background: rgba(33, 150, 243, 0.2);
+            color: #2196F3;
+        }
+
+        .winner-badge.team2 {
+            background: rgba(255, 87, 34, 0.2);
+            color: #FF5722;
         }
 
         .controls {
@@ -223,8 +293,59 @@
             color: white;
         }
 
-        @media (max-width: 768px) {
+        .history-list {
+            background: #2a2a2a;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+
+        .history-item {
+            padding: 15px 20px;
+            border-bottom: 1px solid #444;
+            display: grid;
+            grid-template-columns: 120px 150px 200px 150px 150px 150px auto;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-item:hover {
+            background: #333;
+        }
+
+        .score-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .team-score {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .team1-score {
+            background: rgba(33, 150, 243, 0.2);
+            color: #2196F3;
+        }
+
+        .team2-score {
+            background: rgba(255, 87, 34, 0.2);
+            color: #FF5722;
+        }
+
+        @media (max-width: 1200px) {
             .room-item {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .history-item {
                 grid-template-columns: 1fr;
                 gap: 10px;
             }
@@ -238,7 +359,7 @@
 <body>
     <div class="admin-container">
         <div class="header">
-            <h1><i class="fas fa-cogs"></i> Админ-панель игры</h1>
+            <h1><i class="fas fa-cogs"></i> Админ-панель игры GARAGE</h1>
             <div class="controls">
                 <button id="refresh-btn" class="btn refresh">
                     <i class="fas fa-sync-alt"></i> Обновить
@@ -252,7 +373,7 @@
         <div class="stats-grid">
             <div class="stat-card">
                 <i class="fas fa-door-open"></i>
-                <h3>Активных комнат</h3>
+                <h3>Всего комнат</h3>
                 <div class="value" id="total-rooms">0</div>
             </div>
             <div class="stat-card">
@@ -270,15 +391,44 @@
                 <h3>Ожидающих комнат</h3>
                 <div class="value" id="waiting-rooms">0</div>
             </div>
+            <div class="stat-card">
+                <i class="fas fa-desktop"></i>
+                <h3>Локальных комнат</h3>
+                <div class="value" id="local-rooms">0</div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-trophy"></i>
+                <h3>Завершенных игр</h3>
+                <div class="value" id="finished-games">0</div>
+            </div>
         </div>
 
-        <div class="rooms-list">
-            <div class="rooms-header">
-                <h2><i class="fas fa-list"></i> Активные комнаты</h2>
-                <span id="rooms-count">0 комнат</span>
+        <div class="tabs">
+            <button class="tab active" data-tab="rooms">Активные комнаты</button>
+            <button class="tab" data-tab="history">История игр</button>
+        </div>
+
+        <div id="rooms-tab" class="tab-content">
+            <div class="rooms-list">
+                <div class="rooms-header">
+                    <h2><i class="fas fa-list"></i> Активные комнаты</h2>
+                    <span id="rooms-count">0 комнат</span>
+                </div>
+                <div id="rooms-container">
+                    <!-- Комнаты будут загружены здесь -->
+                </div>
             </div>
-            <div id="rooms-container">
-                <!-- Комнаты будут загружены здесь -->
+        </div>
+
+        <div id="history-tab" class="tab-content" style="display: none;">
+            <div class="history-list">
+                <div class="rooms-header">
+                    <h2><i class="fas fa-history"></i> История завершенных игр</h2>
+                    <span id="history-count">0 игр</span>
+                </div>
+                <div id="history-container">
+                    <!-- История игр будет загружена здесь -->
+                </div>
             </div>
         </div>
 
@@ -307,6 +457,7 @@
 
     <script>
         let lastUpdate = null;
+        let currentTab = 'rooms';
 
         async function loadStats() {
             try {
@@ -317,13 +468,19 @@
                 document.getElementById('total-rooms').textContent = data.totalRooms;
                 document.getElementById('active-games').textContent = data.activeGames;
                 document.getElementById('waiting-rooms').textContent = data.waitingRooms;
+                document.getElementById('local-rooms').textContent = data.localRooms || 0;
+                document.getElementById('finished-games').textContent = data.finishedGames?.length || 0;
                 document.getElementById('rooms-count').textContent = `${data.totalRooms} комнат`;
+                document.getElementById('history-count').textContent = `${data.finishedGames?.length || 0} игр`;
                 
                 // Обновляем время работы
                 document.getElementById('uptime').textContent = `${Math.floor(data.uptime)} сек`;
                 
                 // Обновляем список комнат
                 updateRoomsList(data.rooms);
+                
+                // Обновляем историю игр
+                updateHistoryList(data.finishedGames || []);
                 
                 lastUpdate = new Date();
                 document.getElementById('last-update').textContent = lastUpdate.toLocaleTimeString();
@@ -351,10 +508,17 @@
             
             rooms.forEach(room => {
                 const isGameActive = room.player1 !== 'Ожидает' && room.player2 !== 'Ожидает';
+                const gameFinished = room.state.positions && (room.state.positions[1] >= 40 || room.state.positions[2] >= 40);
+                const winner = room.state.positions?.[1] >= 40 ? 1 : room.state.positions?.[2] >= 40 ? 2 : null;
                 
                 html += `
                     <div class="room-item">
                         <div class="room-code">${room.code}</div>
+                        <div>
+                            <span class="game-mode ${room.gameMode || 'online'}">
+                                ${room.gameMode === 'local' ? 'Локальная' : 'Онлайн'}
+                            </span>
+                        </div>
                         <div>
                             <div style="font-weight: bold;">${room.master}</div>
                             <small>Ведущий</small>
@@ -372,16 +536,68 @@
                             </span>
                         </div>
                         <div>
-                            <span class="game-status ${isGameActive ? 'active' : 'waiting'}">
-                                ${isGameActive ? 'Игра идет' : 'Ожидание'}
+                            <span class="game-status ${gameFinished ? 'finished' : isGameActive ? 'active' : 'waiting'}">
+                                ${gameFinished ? 'Завершена' : isGameActive ? 'Игра идет' : 'Ожидание'}
                             </span>
+                            ${gameFinished && winner ? `
+                                <span class="winner-badge team${winner}">Победитель: команда ${winner}</span>
+                            ` : ''}
                         </div>
                         <div>
-                            <div>Счет: ${room.state.scores[1]}:${room.state.scores[2]}</div>
-                            <small>Ход: команда ${room.state.currentPlayer}</small>
+                            <div>Счет: ${room.state?.scores?.[1] || 0}:${room.state?.scores?.[2] || 0}</div>
+                            <small>Позиции: ${room.state?.positions?.[1] || 0}/${room.state?.positions?.[2] || 0}</small>
                         </div>
                         <div>
                             <small>Создана: ${room.created}</small>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        function updateHistoryList(games) {
+            const container = document.getElementById('history-container');
+            
+            if (games.length === 0) {
+                container.innerHTML = `
+                    <div class="history-item" style="text-align: center; grid-template-columns: 1fr;">
+                        <p>Нет завершенных игр</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            
+            games.forEach(game => {
+                const finishedDate = new Date(game.finishedAt);
+                
+                html += `
+                    <div class="history-item">
+                        <div class="room-code">${game.roomCode}</div>
+                        <div>
+                            <div style="font-weight: bold;">${game.winnerName}</div>
+                            <span class="winner-badge team${game.winner}">Команда ${game.winner}</span>
+                        </div>
+                        <div>
+                            <div>${game.players?.player1 || 'Игрок 1'}</div>
+                            <small>vs</small>
+                            <div>${game.players?.player2 || 'Игрок 2'}</div>
+                        </div>
+                        <div class="score-display">
+                            <span class="team-score team1-score">${game.scores?.[1] || 0}</span>
+                            <span>:</span>
+                            <span class="team-score team2-score">${game.scores?.[2] || 0}</span>
+                        </div>
+                        <div>
+                            <div>Ведущий: ${game.players?.master || 'Неизвестно'}</div>
+                        </div>
+                        <div>
+                            <small>${finishedDate.toLocaleDateString()}</small>
+                            <br>
+                            <small>${finishedDate.toLocaleTimeString()}</small>
                         </div>
                     </div>
                 `;
@@ -407,6 +623,19 @@
             }
         }
 
+        function switchTab(tabName) {
+            // Обновляем активную вкладку
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.tab === tabName);
+            });
+            
+            // Показываем/скрываем контент
+            document.getElementById('rooms-tab').style.display = tabName === 'rooms' ? 'block' : 'none';
+            document.getElementById('history-tab').style.display = tabName === 'history' ? 'block' : 'none';
+            
+            currentTab = tabName;
+        }
+
         // Загружаем статистику при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
             loadStats();
@@ -419,6 +648,13 @@
             
             // Кнопка очистки неактивных комнат
             document.getElementById('clear-rooms-btn').addEventListener('click', clearInactiveRooms);
+            
+            // Переключение вкладок
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    switchTab(tab.dataset.tab);
+                });
+            });
             
             // Получаем порт сервера
             document.getElementById('server-port').textContent = window.location.port || 3000;
