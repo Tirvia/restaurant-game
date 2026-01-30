@@ -24,6 +24,7 @@ class Game {
         
         this.specialZoneQueue = [];
         this.showingSpecialZone = false;
+        this.isSpecialZoneActive = false;
         
         this.triggeredZonesInTurn = {
             1: new Set(),
@@ -156,12 +157,7 @@ class Game {
             });
             
             adminBtn.addEventListener('click', () => {
-                const password = prompt('Введите пароль для доступа к админ-панели:');
-                if (password === 'admin') {
-                    window.location.href = 'admin.html';
-                } else if (password !== null) {
-                    alert('Неверный пароль!');
-                }
+                window.location.href = 'admin.html';
             });
         });
     }
@@ -214,23 +210,23 @@ class Game {
                         </div>
                         
                         <div class="role-option">
-                            <input type="radio" id="role-player1" name="role" value="player1">
-                            <label for="role-player1" class="role-label">
+                            <input type="radio" id="role-player" name="role" value="player">
+                            <label for="role-player" class="role-label">
                                 <i class="fas fa-user-friends"></i>
                                 <div>
-                                    <strong>Игрок 1</strong>
-                                    <small>Команда 1 (синие)</small>
+                                    <strong>Игрок (0/2)</strong>
+                                    <small>Присоединиться как игрок</small>
                                 </div>
                             </label>
                         </div>
                         
                         <div class="role-option">
-                            <input type="radio" id="role-player2" name="role" value="player2">
-                            <label for="role-player2" class="role-label">
-                                <i class="fas fa-user-friends"></i>
+                            <input type="radio" id="role-spectator" name="role" value="spectator">
+                            <label for="role-spectator" class="role-label">
+                                <i class="fas fa-eye"></i>
                                 <div>
-                                    <strong>Игрок 2</strong>
-                                    <small>Команда 2 (оранжевые)</small>
+                                    <strong>Наблюдатель</strong>
+                                    <small>Только просмотр игры</small>
                                 </div>
                             </label>
                         </div>
@@ -338,7 +334,7 @@ class Game {
                 this.playerName = playerName;
                 
                 statusText.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Создаем комнату...';
-                this.socket.emit('create-room', playerName);
+                this.socket.emit('create-room', { playerName, gameMode: 'online' });
             });
             
             joinBtn.addEventListener('click', () => {
@@ -428,10 +424,28 @@ class Game {
             console.error('❌ Ошибка подключения:', error);
         });
         
+        this.socket.on('role-unavailable', (data) => {
+            statusText.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${data.message}`;
+            alert(data.message);
+            
+            // Предлагаем присоединиться как наблюдатель
+            if (data.availableRoles.includes('spectator')) {
+                if (confirm('Хотите присоединиться как наблюдатель?')) {
+                    this.role = 'spectator';
+                    this.socket.emit('join-room', {
+                        roomCode: this.roomCode,
+                        playerName: this.playerName,
+                        role: 'spectator'
+                    });
+                }
+            }
+        });
+        
         this.socket.on('room-created', (data) => {
             this.roomCode = data.roomCode;
             this.playerName = data.playerName;
             this.players.master = data.playerName;
+            this.gameMode = data.gameMode;
             
             modal.querySelector('#room-info').style.display = 'block';
             modal.querySelector('#room-code-display').textContent = data.roomCode;
@@ -460,6 +474,7 @@ class Game {
             this.roomCode = data.roomCode;
             this.playerName = data.playerName;
             this.role = data.role;
+            this.gameMode = data.gameMode;
             
             if (data.gameState) {
                 this.currentPlayer = data.gameState.currentPlayer;
@@ -491,17 +506,27 @@ class Game {
         });
         
         this.socket.on('player-left', (data) => {
-            this.showNotification(`${data.playerName} покинул игру`, 'warning');
+            this.showNotification(`${data.playerName} ${data.message}`, 'warning');
             
             if (data.role === 'player1') {
                 this.players.player1 = '';
                 document.querySelector('#video-team1 .video-placeholder p').textContent = 'Команда 1';
                 document.querySelector('#team1-name').textContent = 'Команда 1';
+                document.querySelector('#master-team1-name').textContent = 'Команда 1';
             } else if (data.role === 'player2') {
                 this.players.player2 = '';
                 document.querySelector('#video-team2 .video-placeholder p').textContent = 'Команда 2';
                 document.querySelector('#team2-name').textContent = 'Команда 2';
+                document.querySelector('#master-team2-name').textContent = 'Команда 2';
             }
+        });
+        
+        this.socket.on('spectator-joined', (data) => {
+            this.showNotification(`${data.playerName} присоединился как наблюдатель`, 'info');
+        });
+        
+        this.socket.on('spectator-left', (data) => {
+            this.showNotification(`${data.playerName} покинул комнату как наблюдатель`, 'info');
         });
         
         this.socket.on('room-closed', (message) => {
@@ -578,22 +603,32 @@ class Game {
         
         this.socket.on('special-zone', (data) => {
             console.log('🎯 Получена специальная зона:', data);
+            this.isSpecialZoneActive = true;
             this.showSpecialZoneModal(data);
         });
         
         this.socket.on('special-zone-result', (data) => {
             console.log('🎯 Результат специальной зоны:', data);
             
+            // Обновляем позицию и очки
+            this.positions[data.team] = data.newPosition;
+            this.scores[data.team] = data.scores[data.team];
+            
+            this.updateScores();
+            this.updatePieces();
+            this.isSpecialZoneActive = false;
+        });
+        
+        this.socket.on('special-zone-closed', () => {
+            console.log('🎯 Специальная зона закрыта');
             const modal = document.querySelector('.special-zone-modal');
             if (modal) modal.remove();
+            this.specialZoneData = null;
+            this.isSpecialZoneActive = false;
             
-            if (this.role !== 'master') {
-                this.movePiece(data.team, data.points);
-                this.specialZoneData = null;
-                
-                if (!this.showingSpecialZone) {
-                    setTimeout(() => this.showNextSpecialZone(), 500);
-                }
+            // Проверяем следующую зону в очереди
+            if (this.specialZoneQueue.length > 0 && !this.showingSpecialZone) {
+                setTimeout(() => this.showNextSpecialZone(), 500);
             }
         });
         
@@ -603,6 +638,7 @@ class Game {
             this.positions = gameState.positions || this.positions;
             this.currentPlayer = gameState.currentPlayer || this.currentPlayer;
             this.diceResult = gameState.diceResult || this.diceResult;
+            this.isSpecialZoneActive = gameState.isSpecialZoneActive || false;
             
             this.updateScores();
             this.updatePieces();
@@ -620,6 +656,10 @@ class Game {
             this.diceRolledInCurrentTurn = false;
             this.waitingForAnswer = false;
             this.answerCompleted = false;
+            this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
+            this.specialZoneQueue = [];
+            this.showingSpecialZone = false;
+            this.isSpecialZoneActive = false;
             this.updateTurnIndicator();
             this.updateRollButton();
             this.showNotification(`Сейчас ходит ${data.playerName}`, 'info');
@@ -647,6 +687,11 @@ class Game {
             this.showNotification('Время вышло!', 'warning');
         });
         
+        this.socket.on('game-over', (data) => {
+            console.log('🏆 Игра окончена!', data);
+            this.showWinner(data.winner, data.winnerName, data.message);
+        });
+        
         this.socket.on('error', (error) => {
             this.showAlert(error.message || 'Произошла ошибка');
         });
@@ -657,13 +702,16 @@ class Game {
                 roomStatus.innerHTML = `<i class="fas fa-check-circle"></i> Комната найдена`;
                 roomStatus.className = 'room-status found';
                 
-                if (data.players) {
-                    let statusText = '';
-                    if (data.players.player1) statusText += 'Игрок 1 занят, ';
-                    if (data.players.player2) statusText += 'Игрок 2 занят';
-                    if (statusText) {
-                        roomStatus.innerHTML += `<br><small>${statusText}</small>`;
-                    }
+                let slotsInfo = '';
+                if (data.slots.player1) slotsInfo += 'Игрок 1 свободен, ';
+                if (data.slots.player2) slotsInfo += 'Игрок 2 свободен';
+                
+                if (slotsInfo) {
+                    roomStatus.innerHTML += `<br><small>${slotsInfo}</small>`;
+                }
+                
+                if (data.spectators > 0) {
+                    roomStatus.innerHTML += `<br><small>Наблюдателей: ${data.spectators}</small>`;
                 }
             } else {
                 roomStatus.innerHTML = `<i class="fas fa-times-circle"></i> Комната не найдена`;
@@ -677,6 +725,7 @@ class Game {
             case 'master': return 'Ведущий';
             case 'player1': return 'Команда 1';
             case 'player2': return 'Команда 2';
+            case 'spectator': return 'Наблюдатель';
             default: return 'Игрок';
         }
     }
@@ -687,6 +736,19 @@ class Game {
         this.players.player2 = players.player2 || '';
         
         this.updateVideoPlaceholders();
+        this.updateMasterPanelNames();
+    }
+
+    updateMasterPanelNames() {
+        const masterTeam1 = document.getElementById('master-team1-name');
+        const masterTeam2 = document.getElementById('master-team2-name');
+        
+        if (masterTeam1) {
+            masterTeam1.textContent = `Команда 1: ${this.players.player1 || 'Ожидает'}`;
+        }
+        if (masterTeam2) {
+            masterTeam2.textContent = `Команда 2: ${this.players.player2 || 'Ожидает'}`;
+        }
     }
 
     async continueGameInitialization() {
@@ -874,30 +936,12 @@ class Game {
         }
         
         const demoCards = {
-            1: [
-                { question: "Как правильно приготовить борщ?", instruction: "Опишите основные шаги" },
-                { question: "Назовите 5 основных ингредиентов для салата Цезарь", instruction: "Перечислите ингредиенты" }
-            ],
-            2: [
-                { question: "Как приготовить коктейль Мохито?", instruction: "Опишите шаги приготовления" },
-                { question: "Что такое Манхэттен коктейль?", instruction: "Опишите состав и способ приготовления" }
-            ],
-            3: [
-                { question: "Какая температура подачи красного вина?", instruction: "Назовите оптимальную температуру" },
-                { question: "Что означает термин 'сомаелье'?", instruction: "Дайте определение" }
-            ],
-            4: [
-                { question: "Гость жалуется на холодное блюдо. Ваши действия?", instruction: "Опишите решение" },
-                { question: "Клиент просит заменить ингредиент из-за аллергии", instruction: "Как поступить?" }
-            ],
-            5: [
-                { question: "Как правильно сервировать стол?", instruction: "Опишите основные правила" },
-                { question: "В какой последовательности подавать приборы?", instruction: "Объясните порядок" }
-            ],
-            6: [
-                { question: "Как предложить гостю дорогое вино?", instruction: "Опишите технику продаж" },
-                { question: "Как увеличить средний чек?", instruction: "Назовите 3 способа" }
-            ]
+            1: [{ question: "Как правильно приготовить борщ?", instruction: "Опишите основные шаги" }],
+            2: [{ question: "Как приготовить коктейль Мохито?", instruction: "Опишите шаги приготовления" }],
+            3: [{ question: "Какая температура подачи красного вина?", instruction: "Назовите оптимальную температуру" }],
+            4: [{ question: "Гость жалуется на холодное блюдо. Ваши действия?", instruction: "Опишите решение" }],
+            5: [{ question: "Как правильно сервировать стол?", instruction: "Опишите основные правила" }],
+            6: [{ question: "Как предложить гостю дорогое вино?", instruction: "Опишите технику продаж" }]
         };
         
         for (let i = 1; i <= 6; i++) {
@@ -1173,6 +1217,7 @@ class Game {
         document.querySelectorAll('.point-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 if (this.gameMode === 'online' && this.role !== 'master') return;
+                if (this.gameMode === 'local' && this.role !== 'local') return;
                 if (this.pointsApplied || this.applyButtonClicked) return;
 
                 const points = parseInt(e.target.dataset.points);
@@ -1180,11 +1225,6 @@ class Game {
                 this.selectPoints(team, points);
             });
         });
-        
-        const applyBtn = document.getElementById('apply-points');
-        if (applyBtn) {
-            applyBtn.addEventListener('click', () => this.applySelectedPoints());
-        }
         
         const nextTurnBtn = document.getElementById('next-turn');
         if (nextTurnBtn) {
@@ -1213,6 +1253,11 @@ class Game {
                 return;
             }
             
+            if (this.isSpecialZoneActive) {
+                alert('Сейчас активна специальная зона!');
+                return;
+            }
+            
             const canRoll = (this.role === 'player1' && this.currentPlayer === 1) ||
                            (this.role === 'player2' && this.currentPlayer === 2);
             
@@ -1230,6 +1275,11 @@ class Game {
             this.socket.emit('roll-dice');
             
         } else {
+            if (this.isSpecialZoneActive) {
+                alert('Сейчас активна специальная зона!');
+                return;
+            }
+            
             if (this.diceRolledInCurrentTurn) {
                 alert('В этом ходе кубик уже брошен!');
                 return;
@@ -1311,7 +1361,7 @@ class Game {
                     if (this.socket && this.isConnected) {
                         this.socket.emit('answer-completed');
                     }
-                    this.hideCard();
+                    this.stopTimerAndCloseCard();
                 };
             } else if (this.role === 'master') {
                 answerBtn.style.display = 'none';
@@ -1325,7 +1375,7 @@ class Game {
             masterBtn.style.display = 'none';
             answerBtn.textContent = 'Завершить ответ';
             answerBtn.onclick = () => {
-                this.hideCard();
+                this.stopTimerAndCloseCard();
                 this.showMasterPanel();
             };
         }
@@ -1456,12 +1506,6 @@ class Game {
                 btn.disabled = false;
             });
             
-            const applyBtn = document.getElementById('apply-points');
-            if (applyBtn) {
-                applyBtn.disabled = false;
-                applyBtn.style.opacity = '1';
-            }
-            
             const nextTurnBtn = document.getElementById('next-turn');
             if (nextTurnBtn) nextTurnBtn.disabled = false;
         } else {
@@ -1469,12 +1513,6 @@ class Game {
                 btn.classList.remove('selected');
                 btn.disabled = true;
             });
-            
-            const applyBtn = document.getElementById('apply-points');
-            if (applyBtn) {
-                applyBtn.disabled = true;
-                applyBtn.style.opacity = '0.6';
-            }
             
             const nextTurnBtn = document.getElementById('next-turn');
             if (nextTurnBtn) nextTurnBtn.disabled = true;
@@ -1509,26 +1547,18 @@ class Game {
         this.updateSelectionDisplay(team);
     }
 
-    applySelectedPoints() {
+    nextTurn() {
         if (this.gameMode === 'online' && this.role !== 'master') {
-            alert('Только ведущий может применять очки!');
+            alert('Только ведущий может переходить к следующему ходу!');
             return;
         }
         
-        if (this.applyButtonClicked) {
-            alert('Очки уже применены в этом ходе!');
+        if (this.isSpecialZoneActive) {
+            alert('Нельзя переходить к следующему ходу пока активна специальная зона!');
             return;
         }
         
-        const hasSelectedPoints = this.selectedPoints[1] !== 0 || this.selectedPoints[2] !== 0;
-        
-        if (!hasSelectedPoints) {
-            this.pointsApplied = true;
-            this.applyButtonClicked = true;
-            this.enableNextTurnButton();
-            return;
-        }
-        
+        // Применяем выбранные очки
         for (let team of [1, 2]) {
             const points = this.selectedPoints[team];
             if (points !== 0) {
@@ -1538,45 +1568,44 @@ class Game {
         }
         
         this.updateScores();
-        this.pointsApplied = true;
-        this.applyButtonClicked = true;
-        
-        document.querySelectorAll('.point-btn').forEach(btn => {
-            btn.disabled = true;
-        });
-        
-        const applyBtn = document.getElementById('apply-points');
-        if (applyBtn) {
-            applyBtn.disabled = true;
-            applyBtn.style.opacity = '0.6';
-        }
-        
-        this.enableNextTurnButton();
         
         if (this.gameMode === 'online' && this.socket && this.isConnected) {
-            const gameState = {
+            this.socket.emit('next-turn', {
                 scores: this.scores,
-                positions: this.positions,
-                currentPlayer: this.currentPlayer,
-                diceResult: this.diceResult
-            };
-            
-            this.socket.emit('update-game', gameState);
+                positions: this.positions
+            });
         }
         
-        for (let team of [1, 2]) {
-            if (this.positions[team] >= 40) {
-                this.showWinner(team);
-            }
-        }
-    }
-
-    enableNextTurnButton() {
-        const nextTurnBtn = document.getElementById('next-turn');
-        if (nextTurnBtn) {
-            nextTurnBtn.disabled = false;
-            nextTurnBtn.style.opacity = '1';
-        }
+        const panel = document.getElementById('master-panel');
+        if (panel) panel.style.display = 'none';
+        
+        this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
+        this.specialZoneQueue = [];
+        this.showingSpecialZone = false;
+        this.isSpecialZoneActive = false;
+        this.specialZoneData = null;
+        
+        this.diceRolledInCurrentTurn = false;
+        this.waitingForAnswer = false;
+        this.answerCompleted = false;
+        this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
+        
+        this.updateTurnIndicator();
+        this.updateRollButton();
+        
+        clearInterval(this.timerInterval);
+        
+        const timer = document.getElementById('timer');
+        if (timer) timer.textContent = '60';
+        
+        const dice = document.getElementById('dice');
+        if (dice) dice.textContent = '?';
+        
+        const taskType = document.getElementById('task-type');
+        if (taskType) taskType.textContent = '';
+        
+        this.resetSelection();
+        this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
     }
 
     movePiece(team, points) {
@@ -1584,12 +1613,27 @@ class Game {
         if (!piece) return;
         
         const newPosition = Math.max(0, Math.min(this.positions[team] + points, 40));
+        const delta = newPosition - this.positions[team];
+        
+        // Обновляем очки с учетом движения (вперед - плюс, назад - минус)
+        if (delta > 0) {
+            this.scores[team] += delta;
+        } else if (delta < 0) {
+            this.scores[team] += delta; // Отрицательное число отнимает очки
+        }
         
         this.animatePieceMovement(team, this.positions[team], newPosition, () => {
             this.positions[team] = newPosition;
             
+            // Проверяем специальную зону
             if (Math.abs(points) <= 6) {
                 this.checkSpecialZone(team, newPosition);
+            }
+            
+            // Проверяем победу
+            if (newPosition >= 40) {
+                const winnerName = team === 1 ? this.players.player1 : this.players.player2;
+                this.showWinner(team, winnerName, `🎉 Победила команда ${team} (${winnerName})!`);
             }
             
             if (this.gameMode === 'online' && this.socket && this.isConnected) {
@@ -1599,6 +1643,9 @@ class Game {
                     currentPlayer: this.currentPlayer
                 };
                 this.socket.emit('update-game', gameState);
+                
+                // Проверяем специальную зону на сервере
+                this.socket.emit('check-special-zone', { team, position: newPosition });
             }
         });
     }
@@ -1613,19 +1660,13 @@ class Game {
         let currentStep = fromPosition;
         
         const moveStep = () => {
-            if (direction > 0) {
-                currentStep++;
-                if (currentStep > toPosition) {
-                    if (callback) callback();
-                    return;
-                }
-            } else {
-                currentStep--;
-                if (currentStep < toPosition) {
-                    if (callback) callback();
-                    return;
-                }
+            if ((direction > 0 && currentStep >= toPosition) || 
+                (direction < 0 && currentStep <= toPosition)) {
+                if (callback) callback();
+                return;
             }
+            
+            currentStep += direction;
             
             if (positions[currentStep]) {
                 piece.style.left = (positions[currentStep].x + 5) + 'px';
@@ -1669,7 +1710,7 @@ class Game {
             
             this.specialZoneQueue.sort((a, b) => a.priority - b.priority);
 
-            if (!this.showingSpecialZone) {
+            if (!this.showingSpecialZone && !this.isSpecialZoneActive) {
                 this.showNextSpecialZone();
             }
         }
@@ -1699,9 +1740,9 @@ class Game {
                 roomCode: this.roomCode,
                 ...this.specialZoneData
             });
+        } else {
+            this.showSpecialZoneModal(this.specialZoneData);
         }
-        
-        this.showSpecialZoneModal(this.specialZoneData);
     }
 
     showSpecialZoneModal(data) {
@@ -1757,30 +1798,40 @@ class Game {
         
         if (isMaster) {
             modal.querySelector('#special-correct').addEventListener('click', () => {
-                this.movePiece(data.team, data.positive);
+                const points = data.positive;
+                this.movePiece(data.team, points);
+                
                 if (this.gameMode === 'online' && this.socket && this.isConnected) {
                     this.socket.emit('special-zone-result', {
                         roomCode: this.roomCode,
                         team: data.team,
-                        points: data.positive
+                        points: points
                     });
                 }
+                
                 modal.remove();
                 this.specialZoneData = null;
+                this.showingSpecialZone = false;
+                this.isSpecialZoneActive = false;
                 setTimeout(() => this.showNextSpecialZone(), 500);
             });
 
             modal.querySelector('#special-incorrect').addEventListener('click', () => {
-                this.movePiece(data.team, data.negative);
+                const points = data.negative;
+                this.movePiece(data.team, points);
+                
                 if (this.gameMode === 'online' && this.socket && this.isConnected) {
                     this.socket.emit('special-zone-result', {
                         roomCode: this.roomCode,
                         team: data.team,
-                        points: data.negative
+                        points: points
                     });
                 }
+                
                 modal.remove();
                 this.specialZoneData = null;
+                this.showingSpecialZone = false;
+                this.isSpecialZoneActive = false;
                 setTimeout(() => this.showNextSpecialZone(), 500);
             });
         }
@@ -1839,6 +1890,27 @@ class Game {
         if (videoTeam) videoTeam.classList.add('current-turn');
         if (teamScore) teamScore.classList.add('current-turn');
         if (turnIndicator) turnIndicator.style.display = 'block';
+        
+        // Устанавливаем цвет подсветки в соответствии с цветом команды
+        if (teamScore) {
+            if (currentTeam === 1) {
+                teamScore.style.borderColor = '#2196F3';
+                teamScore.style.boxShadow = '0 0 15px rgba(33, 150, 243, 0.3)';
+            } else {
+                teamScore.style.borderColor = '#FF5722';
+                teamScore.style.boxShadow = '0 0 15px rgba(255, 87, 34, 0.3)';
+            }
+        }
+        
+        if (videoTeam) {
+            if (currentTeam === 1) {
+                videoTeam.style.borderColor = '#2196F3';
+                videoTeam.style.boxShadow = '0 0 20px rgba(33, 150, 243, 0.5)';
+            } else {
+                videoTeam.style.borderColor = '#FF5722';
+                videoTeam.style.boxShadow = '0 0 20px rgba(255, 87, 34, 0.5)';
+            }
+        }
     }
 
     updateRollButton() {
@@ -1846,11 +1918,15 @@ class Game {
         if (!rollBtn) return;
         
         if (this.gameMode === 'local') {
-            const canRoll = !this.diceRolledInCurrentTurn;
+            const canRoll = !this.diceRolledInCurrentTurn && !this.isSpecialZoneActive;
             rollBtn.disabled = !canRoll;
             
             if (rollBtn.disabled) {
-                rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Кубик уже брошен';
+                if (this.isSpecialZoneActive) {
+                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Активна специальная зона';
+                } else {
+                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Кубик уже брошен';
+                }
             } else {
                 rollBtn.innerHTML = `<i class="fas fa-dice"></i> Бросить кубик (Ход команды ${this.currentPlayer})`;
             }
@@ -1859,15 +1935,16 @@ class Game {
             const isPlayer1 = this.role === 'player1';
             const isPlayer2 = this.role === 'player2';
             const isMaster = this.role === 'master';
+            const isSpectator = this.role === 'spectator';
             
             const canRoll = (isPlayer1 && this.currentPlayer === 1) ||
                            (isPlayer2 && this.currentPlayer === 2);
-            const canRollNow = canRoll && !this.diceRolledInCurrentTurn;
+            const canRollNow = canRoll && !this.diceRolledInCurrentTurn && !this.isSpecialZoneActive;
             
-            rollBtn.disabled = !canRollNow || isMaster || this.waitingForAnswer;
+            rollBtn.disabled = !canRollNow || isMaster || isSpectator || this.waitingForAnswer;
             
             if (rollBtn.disabled) {
-                if (isMaster) {
+                if (isMaster || isSpectator) {
                     rollBtn.innerHTML = '<i class="fas fa-dice"></i> Бросок кубика (только игроки)';
                 } else if (!canRoll) {
                     rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте хода';
@@ -1875,6 +1952,8 @@ class Game {
                     rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте ответа';
                 } else if (this.waitingForAnswer) {
                     rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Ожидайте ответа';
+                } else if (this.isSpecialZoneActive) {
+                    rollBtn.innerHTML = '<i class="fas fa-hourglass-half"></i> Активна специальная зона';
                 }
             } else {
                 rollBtn.innerHTML = '<i class="fas fa-dice"></i> Бросить кубик';
@@ -1884,10 +1963,34 @@ class Game {
 
     setupRoleInterface() {
         const isMaster = this.role === 'master';
+        const isSpectator = this.role === 'spectator';
 
         const panel = document.getElementById('master-panel');
         if (panel) {
-            panel.style.display = isMaster ? 'block' : 'none';
+            if (isMaster || this.gameMode === 'local') {
+                panel.style.display = 'block';
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+
+        // Скрываем кнопки для наблюдателей
+        if (isSpectator) {
+            const rollBtn = document.getElementById('roll-dice');
+            if (rollBtn) rollBtn.style.display = 'none';
+            
+            const answerBtn = document.getElementById('answer-received');
+            if (answerBtn) answerBtn.style.display = 'none';
+            
+            const masterBtn = document.getElementById('master-evaluation');
+            if (masterBtn) masterBtn.style.display = 'none';
+            
+            const nextTurnBtn = document.getElementById('next-turn');
+            if (nextTurnBtn) nextTurnBtn.style.display = 'none';
+            
+            document.querySelectorAll('.point-btn').forEach(btn => {
+                btn.style.display = 'none';
+            });
         }
 
         document.querySelectorAll('.deck').forEach(deck => {
@@ -1927,81 +2030,134 @@ class Game {
             case 'master': return 'Ведущий';
             case 'player1': return 'Команда 1';
             case 'player2': return 'Команда 2';
+            case 'spectator': return 'Наблюдатель';
             case 'local': return 'Локальный игрок';
             default: return 'Наблюдатель';
         }
     }
 
-    nextTurn() {
-        if (this.gameMode === 'online' && this.role !== 'master') {
-            alert('Только ведущий может переходить к следующему ходу!');
-            return;
-        }
+    showWinner(team, winnerName, message) {
+        // Создаем красивое поздравление
+        const winnerModal = document.createElement('div');
+        winnerModal.className = 'winner-modal';
+        winnerModal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            animation: fadeIn 0.5s ease-out;
+        `;
         
-        if (this.gameMode === 'online' && this.socket && this.isConnected) {
-            this.socket.emit('next-turn');
-        }
+        const teamColor = team === 1 ? '#2196F3' : '#FF5722';
         
-        const panel = document.getElementById('master-panel');
-        if (panel) panel.style.display = 'none';
+        winnerModal.innerHTML = `
+            <div class="winner-content" style="
+                background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+                padding: 50px;
+                border-radius: 20px;
+                text-align: center;
+                border: 5px solid ${teamColor};
+                max-width: 600px;
+                width: 90%;
+                animation: scaleIn 0.5s ease-out;
+            ">
+                <div style="font-size: 80px; margin-bottom: 20px;">
+                    🏆
+                </div>
+                <h1 style="color: ${teamColor}; font-size: 36px; margin-bottom: 20px;">
+                    ПОБЕДА!
+                </h1>
+                <h2 style="color: white; font-size: 28px; margin-bottom: 30px;">
+                    ${message}
+                </h2>
+                <div style="
+                    background: rgba(255, 255, 255, 0.1);
+                    padding: 20px;
+                    border-radius: 10px;
+                    margin-bottom: 30px;
+                ">
+                    <p style="font-size: 20px; margin-bottom: 10px;">ФИНАЛЬНЫЙ СЧЕТ</p>
+                    <div style="display: flex; justify-content: center; gap: 40px; margin-top: 20px;">
+                        <div>
+                            <h3 style="color: #2196F3;">Команда 1</h3>
+                            <div style="font-size: 48px; font-weight: bold;">${this.scores[1]}</div>
+                        </div>
+                        <div style="font-size: 36px; align-self: center;">:</div>
+                        <div>
+                            <h3 style="color: #FF5722;">Команда 2</h3>
+                            <div style="font-size: 48px; font-weight: bold;">${this.scores[2]}</div>
+                        </div>
+                    </div>
+                </div>
+                <button id="close-winner" class="btn" style="
+                    background: ${teamColor};
+                    padding: 15px 40px;
+                    font-size: 18px;
+                    margin-top: 20px;
+                ">
+                    <i class="fas fa-trophy"></i> Закрыть
+                </button>
+            </div>
+        `;
         
-        this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
-        this.specialZoneQueue = [];
-        this.showingSpecialZone = false;
-        this.specialZoneData = null;
+        document.body.appendChild(winnerModal);
         
-        this.diceRolledInCurrentTurn = false;
-        this.waitingForAnswer = false;
-        this.answerCompleted = false;
-        this.currentPlayer = this.currentPlayer === 1 ? 2 : 1;
+        // Запускаем салюты
+        this.startFireworks(teamColor);
         
-        this.updateTurnIndicator();
-        this.updateRollButton();
+        // Добавляем обработчик закрытия
+        winnerModal.querySelector('#close-winner').addEventListener('click', () => {
+            winnerModal.remove();
+            const fireworks = document.getElementById('fireworks');
+            if (fireworks) {
+                fireworks.style.display = 'none';
+                fireworks.innerHTML = '';
+            }
+        });
         
-        clearInterval(this.timerInterval);
-        
-        const timer = document.getElementById('timer');
-        if (timer) timer.textContent = '60';
-        
-        const dice = document.getElementById('dice');
-        if (dice) dice.textContent = '?';
-        
-        const taskType = document.getElementById('task-type');
-        if (taskType) taskType.textContent = '';
-        
-        this.resetSelection();
-        this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
+        // Автоматическое закрытие через 10 секунд
+        setTimeout(() => {
+            if (winnerModal.parentNode) {
+                winnerModal.remove();
+                const fireworks = document.getElementById('fireworks');
+                if (fireworks) {
+                    fireworks.style.display = 'none';
+                    fireworks.innerHTML = '';
+                }
+            }
+        }, 10000);
     }
 
-    showWinner(team) {
+    startFireworks(color) {
         const fireworks = document.getElementById('fireworks');
-        if (fireworks) fireworks.style.display = 'block';
+        if (!fireworks) return;
         
-        for (let i = 0; i < 30; i++) {
+        fireworks.style.display = 'block';
+        
+        for (let i = 0; i < 50; i++) {
             setTimeout(() => {
                 const firework = document.createElement('div');
                 firework.style.position = 'fixed';
                 firework.style.left = Math.random() * 100 + 'vw';
                 firework.style.top = Math.random() * 100 + 'vh';
-                firework.style.width = '5px';
-                firework.style.height = '5px';
-                firework.style.background = team === 1 ? '#2196F3' : '#FF5722';
+                firework.style.width = '8px';
+                firework.style.height = '8px';
+                firework.style.background = color;
                 firework.style.borderRadius = '50%';
-                firework.style.animation = 'firework 1s forwards';
+                firework.style.animation = 'firework 1.5s forwards';
+                firework.style.zIndex = '2001';
                 
-                if (fireworks) fireworks.appendChild(firework);
+                fireworks.appendChild(firework);
                 
-                setTimeout(() => firework.remove(), 1000);
+                setTimeout(() => firework.remove(), 1500);
             }, i * 100);
         }
-        
-        setTimeout(() => {
-            alert(`🎉 Победила Команда ${team}! 🎉`);
-            if (fireworks) {
-                fireworks.style.display = 'none';
-                fireworks.innerHTML = '';
-            }
-        }, 3000);
     }
 
     showAlert(message) {
