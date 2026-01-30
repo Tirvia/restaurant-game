@@ -28,6 +28,9 @@ app.get('/admin.html', (req, res) => {
 // Middleware для парсинга JSON
 app.use(express.json());
 
+// Хранилище завершенных игр
+const finishedGames = [];
+
 // API для проверки здоровья
 app.get('/health', (req, res) => {
   res.json({ 
@@ -35,30 +38,38 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     rooms: Array.from(rooms.keys()).length,
     players: Array.from(rooms.values()).reduce((acc, room) => {
-      return acc + (room.player1 ? 1 : 0) + (room.player2 ? 1 : 0) + 1;
+      return acc + (room.player1 ? 1 : 0) + (room.player2 ? 1 : 0) + (room.spectators ? room.spectators.size : 0) + 1;
     }, 0),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    finishedGames: finishedGames.length
   });
 });
 
 // API для получения статистики
 app.get('/stats', (req, res) => {
+  const allRooms = Array.from(rooms.entries());
   const stats = {
-    totalRooms: Array.from(rooms.keys()).length,
-    activeGames: Array.from(rooms.values()).filter(room => 
-      room.player1 && room.player2
+    totalRooms: allRooms.length,
+    activeGames: allRooms.filter(([code, room]) => 
+      room.player1 && room.player2 && room.state.gameStarted
     ).length,
-    waitingRooms: Array.from(rooms.values()).filter(room => 
+    waitingRooms: allRooms.filter(([code, room]) => 
       !room.player1 || !room.player2
     ).length,
-    rooms: Array.from(rooms.entries()).map(([code, room]) => ({
+    localRooms: allRooms.filter(([code, room]) => 
+      room.gameMode === 'local'
+    ).length,
+    rooms: allRooms.map(([code, room]) => ({
       code,
+      gameMode: room.gameMode || 'online',
       master: room.master.name,
       player1: room.player1?.name || 'Ожидает',
       player2: room.player2?.name || 'Ожидает',
+      spectators: room.spectators ? room.spectators.size : 0,
       state: room.state,
       created: new Date(room.createdAt).toLocaleString()
-    }))
+    })),
+    finishedGames: finishedGames.slice(-20).reverse() // Последние 20 игр
   };
   res.json(stats);
 });
@@ -73,8 +84,11 @@ app.post('/clear-rooms', (req, res) => {
     if (now - room.lastActivity > timeout) {
       rooms.delete(roomCode);
       cleaned++;
-      io.to(roomCode).emit('room-closed', 'Комната удалена из-за неактивности');
-      io.in(roomCode).socketsLeave(roomCode);
+      
+      if (room.gameMode !== 'local') {
+        io.to(roomCode).emit('room-closed', 'Комната удалена из-за неактивности');
+        io.in(roomCode).socketsLeave(roomCode);
+      }
     }
   }
   
@@ -91,30 +105,17 @@ try {
   console.error('❌ Ошибка загрузки карточек:', error);
   cardsData = {
     categories: {
-      1: [
-        { question: "Как правильно приготовить борщ?", instruction: "Опишите основные шаги" },
-        { question: "Назовите 5 основных ингредиентов для салата Цезарь", instruction: "Перечислите ингредиенты" }
-      ],
-      2: [
-        { question: "Как приготовить коктейль Мохито?", instruction: "Опишите шаги приготовления" },
-        { question: "Что такое Манхэттен коктейль?", instruction: "Опишите состав и способ приготовления" }
-      ],
-      3: [
-        { question: "Какая температура подачи красного вина?", instruction: "Назовите оптимальную температуру" },
-        { question: "Что означает термин 'сомаелье'?", instruction: "Дайте определение" }
-      ],
-      4: [
-        { question: "Гость жалуется на холодное блюдо. Ваши действия?", instruction: "Опишите решение" },
-        { question: "Клиент просит заменить ингредиент из-за аллергии", instruction: "Как поступить?" }
-      ],
-      5: [
-        { question: "Как правильно сервировать стол?", instruction: "Опишите основные правила" },
-        { question: "В какой последовательности подавать приборы?", instruction: "Объясните порядок" }
-      ],
-      6: [
-        { question: "Как предложить гостю дорогое вино?", instruction: "Опишите технику продаж" },
-        { question: "Как увеличить средний чек?", instruction: "Назовите 3 способа" }
-      ]
+      1: [{ question: "Как правильно приготовить борщ?", instruction: "Опишите основные шаги" }],
+      2: [{ question: "Как приготовить коктейль Мохито?", instruction: "Опишите шаги приготовления" }],
+      3: [{ question: "Какая температура подачи красного вина?", instruction: "Назовите оптимальную температуру" }],
+      4: [{ question: "Гость жалуется на холодное блюдо. Ваши действия?", instruction: "Опишите решение" }],
+      5: [{ question: "Как правильно сервировать стол?", instruction: "Опишите основные правила" }],
+      6: [{ question: "Как предложить гостю дорогое вино?", instruction: "Опишите технику продаж" }]
+    },
+    zones: {
+      grams: "Назовите точный вес ингредиента для этого блюда в граммах.",
+      description: "Дайте красочное описание этого блюда или напитка, чтобы вызвать аппетит у гостя.",
+      allergy: "Можно ли убрать этот ингредиент из блюда без ущерба для вкуса? Почему?"
     }
   };
 }
@@ -215,8 +216,10 @@ setInterval(() => {
         timers.delete(roomCode);
       }
       
-      io.to(roomCode).emit('room-closed', 'Комната удалена из-за неактивности');
-      io.in(roomCode).socketsLeave(roomCode);
+      if (room.gameMode !== 'local') {
+        io.to(roomCode).emit('room-closed', 'Комната удалена из-за неактивности');
+        io.in(roomCode).socketsLeave(roomCode);
+      }
     }
   }
 }, 5 * 60 * 1000);
@@ -230,10 +233,11 @@ io.on('connection', (socket) => {
   });
 
   // Создание комнаты
-  socket.on('create-room', (playerName) => {
+  socket.on('create-room', (data) => {
+    const { playerName, gameMode = 'online' } = data;
     const roomCode = generateRoomCode();
     
-    rooms.set(roomCode, {
+    const newRoom = {
       master: { 
         id: socket.id, 
         name: playerName,
@@ -241,6 +245,8 @@ io.on('connection', (socket) => {
       },
       player1: null,
       player2: null,
+      spectators: new Map(),
+      gameMode: gameMode,
       state: {
         currentPlayer: 1,
         scores: { 1: 0, 2: 0 },
@@ -251,11 +257,18 @@ io.on('connection', (socket) => {
         gameStarted: false,
         waitingForAnswer: false,
         currentQuestion: null,
-        currentQuestionCategory: null
+        currentQuestionCategory: null,
+        activatedZones: { 1: [], 2: [] }, // Храним активированные зоны за ход
+        isSpecialZoneActive: false // Флаг активной специальной зоны
       },
       createdAt: Date.now(),
-      lastActivity: Date.now()
-    });
+      lastActivity: Date.now(),
+      finished: false,
+      winner: null,
+      winnerName: null
+    };
+
+    rooms.set(roomCode, newRoom);
 
     socket.join(roomCode);
     socket.data = {
@@ -270,6 +283,7 @@ io.on('connection', (socket) => {
       roomCode,
       role: 'master',
       playerName,
+      gameMode: gameMode,
       timestamp: new Date().toISOString()
     });
 
@@ -277,7 +291,7 @@ io.on('connection', (socket) => {
       totalRooms: Array.from(rooms.keys()).length
     });
 
-    console.log(`✅ Комната создана: ${roomCode}, ведущий: ${playerName}`);
+    console.log(`✅ Комната создана: ${roomCode}, ведущий: ${playerName}, режим: ${gameMode}`);
   });
 
   // Присоединение к комнате
@@ -292,6 +306,14 @@ io.on('connection', (socket) => {
       return;
     }
 
+    if (room.finished) {
+      socket.emit('error', { 
+        code: 'GAME_FINISHED', 
+        message: 'Игра уже завершена' 
+      });
+      return;
+    }
+
     if (room.master.id === socket.id) {
       socket.emit('error', { 
         code: 'ALREADY_IN_ROOM', 
@@ -300,7 +322,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (room.player1?.id === socket.id || room.player2?.id === socket.id) {
+    // Проверяем, не подключен ли уже
+    if (room.player1?.id === socket.id || room.player2?.id === socket.id || room.spectators.has(socket.id)) {
       socket.emit('error', { 
         code: 'ALREADY_IN_ROOM', 
         message: 'Вы уже присоединились к этой комнате' 
@@ -311,22 +334,8 @@ io.on('connection', (socket) => {
     let assignedRole = role;
     let success = false;
     
-    if (role === 'player1' && !room.player1) {
-      room.player1 = { 
-        id: socket.id, 
-        name: playerName,
-        joinedAt: Date.now()
-      };
-      success = true;
-    } else if (role === 'player2' && !room.player2) {
-      room.player2 = { 
-        id: socket.id, 
-        name: playerName,
-        joinedAt: Date.now()
-      };
-      success = true;
-    } else {
-      // Автоназначение
+    if (role === 'player') {
+      // Автоназначение игрока
       if (!room.player1) {
         assignedRole = 'player1';
         room.player1 = { 
@@ -343,13 +352,26 @@ io.on('connection', (socket) => {
           joinedAt: Date.now()
         };
         success = true;
+      } else {
+        // Мест для игроков нет, предлагаем роль наблюдателя
+        socket.emit('role-unavailable', {
+          message: 'Все места для игроков заняты. Вы можете присоединиться как наблюдатель',
+          availableRoles: ['spectator']
+        });
+        return;
       }
-    }
-
-    if (!success) {
+    } else if (role === 'spectator') {
+      room.spectators.set(socket.id, { 
+        id: socket.id, 
+        name: playerName,
+        joinedAt: Date.now()
+      });
+      assignedRole = 'spectator';
+      success = true;
+    } else {
       socket.emit('error', { 
-        code: 'ROOM_FULL', 
-        message: 'Комната заполнена' 
+        code: 'INVALID_ROLE', 
+        message: 'Неверная роль' 
       });
       return;
     }
@@ -376,6 +398,7 @@ io.on('connection', (socket) => {
         player1: room.player1?.name || null,
         player2: room.player2?.name || null
       },
+      gameMode: room.gameMode,
       timestamp: new Date().toISOString()
     });
 
@@ -416,6 +439,7 @@ io.on('connection', (socket) => {
       socket.emit('room-status', {
         exists: true,
         code: roomCode,
+        gameMode: room.gameMode,
         players: {
           master: room.master.name,
           player1: room.player1?.name,
@@ -426,6 +450,7 @@ io.on('connection', (socket) => {
           player1: !room.player1,
           player2: !room.player2
         },
+        spectators: room.spectators.size,
         gameStarted: room.state.gameStarted,
         created: new Date(room.createdAt).toLocaleString()
       });
@@ -456,6 +481,7 @@ io.on('connection', (socket) => {
       master: room.master.name,
       player1: room.player1?.name || 'Ожидает',
       player2: room.player2?.name || 'Ожидает',
+      spectators: Array.from(room.spectators.values()).map(s => s.name),
       gameState: room.state,
       created: new Date(room.createdAt).toLocaleString(),
       lastActivity: new Date(room.lastActivity).toLocaleString()
@@ -478,6 +504,11 @@ io.on('connection', (socket) => {
 
     if (!room.state.gameStarted) {
       socket.emit('error', { message: 'Игра еще не началась. Ожидайте подключения всех игроков.' });
+      return;
+    }
+
+    if (room.state.isSpecialZoneActive) {
+      socket.emit('error', { message: 'Сейчас активна специальная зона' });
       return;
     }
 
@@ -541,12 +572,14 @@ io.on('connection', (socket) => {
     });
 
     // Запускаем таймер для всех
-    startTimer(roomCode);
+    if (room.gameMode === 'online') {
+      startTimer(roomCode);
+    }
 
     console.log(`🎲 В комнате ${roomCode} выброшен ${diceResult} игроком ${playerName}`);
   });
 
-  // Игрок завершил ответ (нажал кнопку "Завершить ответ")
+  // Игрок завершил ответ
   socket.on('answer-completed', () => {
     const { roomCode, role, playerName } = socket.data;
     if (!roomCode) return;
@@ -557,11 +590,10 @@ io.on('connection', (socket) => {
     room.state.waitingForAnswer = false;
     room.lastActivity = Date.now();
     
-    // Останавливаем таймер
-    stopTimer(roomCode);
-    
-    // Скрываем карточку только у отвечающего игрока
-    socket.emit('hide-card');
+    // Останавливаем таймер для онлайн-игры
+    if (room.gameMode === 'online') {
+      stopTimer(roomCode);
+    }
     
     // Уведомляем ведущего, что игрок завершил ответ
     const masterSocket = io.sockets.sockets.get(room.master.id);
@@ -572,7 +604,7 @@ io.on('connection', (socket) => {
     console.log(`✅ Игрок ${playerName} завершил ответ в комнате ${roomCode}`);
   });
 
-  // Ведущий начал оценивание (нажал "Приступить к оцениванию")
+  // Ведущий начал оценивание
   socket.on('start-evaluation', () => {
     const { roomCode, role } = socket.data;
     if (!roomCode || role !== 'master') return;
@@ -591,20 +623,32 @@ io.on('connection', (socket) => {
     console.log(`👑 Ведущий начал оценивание в комнате ${roomCode}`);
   });
 
-  // Специальная зона (ведущий отправил вопрос зоны)
-  socket.on('special-zone', (data) => {
-    const { roomCode, ...zoneData } = data;
-    const { role } = socket.data;
+  // Проверка специальной зоны
+  socket.on('check-special-zone', ({ team, position }) => {
+    const { roomCode } = socket.data;
+    if (!roomCode) return;
     
-    if (!roomCode || role !== 'master') return;
+    const room = rooms.get(roomCode);
+    if (!room) return;
     
-    // Отправляем вопрос зоны всем в комнате
-    io.to(roomCode).emit('special-zone', zoneData);
-    
-    console.log(`🎯 Ведущий отправил специальную зону в комнате ${roomCode}: ${zoneData.zoneName}`);
+    const zoneType = getZoneType(position);
+    if (zoneType && !room.state.activatedZones[team].includes(zoneType)) {
+      room.state.activatedZones[team].push(zoneType);
+      room.state.isSpecialZoneActive = true;
+      
+      const zoneData = getZoneData(zoneType);
+      io.to(roomCode).emit('special-zone', {
+        team,
+        zoneType,
+        zoneName: zoneData.name,
+        question: zoneData.question,
+        positive: zoneData.positive,
+        negative: zoneData.negative
+      });
+    }
   });
 
-  // Результат специальной зоны (ведущий оценил ответ)
+  // Результат специальной зоны
   socket.on('special-zone-result', (data) => {
     const { roomCode, team, points } = data;
     const { role } = socket.data;
@@ -616,24 +660,59 @@ io.on('connection', (socket) => {
     
     // Обновляем позицию фишки
     const newPosition = Math.max(0, Math.min(room.state.positions[team] + points, 40));
-    room.state.positions[team] = newPosition;
+    const delta = newPosition - room.state.positions[team];
     
-    // Обновляем очки (если положительные очки)
-    if (points > 0) {
-      room.state.scores[team] += points;
+    // Обновляем очки с учетом движения (вперед - плюс, назад - минус)
+    if (delta > 0) {
+      room.state.scores[team] += delta;
+    } else if (delta < 0) {
+      room.state.scores[team] += delta; // Отрицательное число отнимает очки
     }
     
+    room.state.positions[team] = newPosition;
+    room.state.isSpecialZoneActive = false;
     room.lastActivity = Date.now();
     
     // Отправляем обновленное состояние всем
     io.to(roomCode).emit('game-updated', room.state);
     
     // Отправляем результат зоны всем
-    io.to(roomCode).emit('special-zone-result', { team, points });
+    io.to(roomCode).emit('special-zone-result', { 
+      team, 
+      points,
+      newPosition,
+      scores: room.state.scores
+    });
+    
+    // Закрываем окно специальной зоны у всех
+    io.to(roomCode).emit('special-zone-closed');
     
     // Проверяем победителя
     if (newPosition >= 40) {
       const winnerName = team === 1 ? room.player1?.name : room.player2?.name;
+      room.finished = true;
+      room.winner = team;
+      room.winnerName = winnerName;
+      
+      // Сохраняем в историю
+      finishedGames.push({
+        roomCode,
+        winner: team,
+        winnerName,
+        scores: room.state.scores,
+        players: {
+          player1: room.player1?.name,
+          player2: room.player2?.name,
+          master: room.master.name
+        },
+        finishedAt: new Date().toISOString()
+      });
+      
+      // Ограничиваем историю до 50 последних игр
+      if (finishedGames.length > 50) {
+        finishedGames.shift();
+      }
+      
       io.to(roomCode).emit('game-over', {
         winner: team,
         winnerName,
@@ -668,6 +747,28 @@ io.on('connection', (socket) => {
       if (room.state.positions[1] >= 40 || room.state.positions[2] >= 40) {
         const winner = room.state.positions[1] >= 40 ? 1 : 2;
         const winnerName = winner === 1 ? room.player1?.name : room.player2?.name;
+        room.finished = true;
+        room.winner = winner;
+        room.winnerName = winnerName;
+        
+        // Сохраняем в историю
+        finishedGames.push({
+          roomCode,
+          winner,
+          winnerName,
+          scores: room.state.scores,
+          players: {
+            player1: room.player1?.name,
+            player2: room.player2?.name,
+            master: room.master.name
+          },
+          finishedAt: new Date().toISOString()
+        });
+        
+        // Ограничиваем историю до 50 последних игр
+        if (finishedGames.length > 50) {
+          finishedGames.shift();
+        }
         
         io.to(roomCode).emit('game-over', {
           winner,
@@ -682,7 +783,7 @@ io.on('connection', (socket) => {
   });
 
   // Следующий ход
-  socket.on('next-turn', () => {
+  socket.on('next-turn', (data = {}) => {
     const { roomCode, role } = socket.data;
     if (!roomCode || role !== 'master') {
       socket.emit('error', { message: 'Только ведущий может переходить к следующему ходу' });
@@ -691,11 +792,25 @@ io.on('connection', (socket) => {
     
     const room = rooms.get(roomCode);
     if (room) {
+      if (room.state.isSpecialZoneActive) {
+        socket.emit('error', { message: 'Нельзя переходить к следующему ходу пока активна специальная зона' });
+        return;
+      }
+      
+      // Применяем очки если есть
+      if (data.scores) {
+        room.state.scores = data.scores;
+      }
+      if (data.positions) {
+        room.state.positions = data.positions;
+      }
+      
       room.state.currentPlayer = room.state.currentPlayer === 1 ? 2 : 1;
       room.state.diceResult = 0;
       room.state.waitingForAnswer = false;
       room.state.currentQuestion = null;
       room.state.currentQuestionCategory = null;
+      room.state.activatedZones = { 1: [], 2: [] };
       room.lastActivity = Date.now();
       
       // Останавливаем таймер
@@ -730,11 +845,16 @@ io.on('connection', (socket) => {
         diceResult: 0,
         timer: 60,
         timerRunning: false,
-        gameStarted: true,
+        gameStarted: room.player1 && room.player2,
         waitingForAnswer: false,
         currentQuestion: null,
-        currentQuestionCategory: null
+        currentQuestionCategory: null,
+        activatedZones: { 1: [], 2: [] },
+        isSpecialZoneActive: false
       };
+      room.finished = false;
+      room.winner = null;
+      room.winnerName = null;
       room.lastActivity = Date.now();
       
       // Останавливаем таймер
@@ -776,11 +896,14 @@ io.on('connection', (socket) => {
       
       // Удаляем комнату
       rooms.delete(roomCode);
-      io.to(roomCode).emit('room-closed', {
-        message: 'Ведущий покинул игру. Комната удалена.',
-        reason: 'master_left'
-      });
-      io.in(roomCode).socketsLeave(roomCode);
+      
+      if (room.gameMode === 'online') {
+        io.to(roomCode).emit('room-closed', {
+          message: 'Ведущий покинул игру. Комната удалена.',
+          reason: 'master_left'
+        });
+        io.in(roomCode).socketsLeave(roomCode);
+      }
       
       console.log(`🗑️ Комната ${roomCode} удалена (ведущий отключился)`);
     } else if (role === 'player1') {
@@ -788,7 +911,7 @@ io.on('connection', (socket) => {
       io.to(roomCode).emit('player-left', { 
         role: 'player1', 
         playerName,
-        message: `${playerName} покинул игру`,
+        message: `${playerName} вышел. Ждем повторного подключения.`,
         timestamp: new Date().toISOString()
       });
       
@@ -800,13 +923,20 @@ io.on('connection', (socket) => {
       io.to(roomCode).emit('player-left', { 
         role: 'player2', 
         playerName,
-        message: `${playerName} покинул игру`,
+        message: `${playerName} вышел. Ждем повторного подключения.`,
         timestamp: new Date().toISOString()
       });
       
       if (!room.player1) {
         room.state.gameStarted = false;
       }
+    } else if (role === 'spectator') {
+      room.spectators.delete(socket.id);
+      io.to(roomCode).emit('spectator-left', {
+        playerName,
+        message: `${playerName} покинул комнату как наблюдатель`,
+        timestamp: new Date().toISOString()
+      });
     }
 
     io.emit('server-stats-update', {
@@ -845,6 +975,38 @@ function getTaskName(diceNumber) {
     6: 'Продажи'
   };
   return tasks[diceNumber] || 'Неизвестное задание';
+}
+
+function getZoneType(position) {
+  if (position >= 11 && position <= 14) return 'grams';
+  if (position >= 19 && position <= 22) return 'description';
+  if (position >= 33 && position <= 36) return 'allergy';
+  return null;
+}
+
+function getZoneData(zoneType) {
+  const zoneSettings = {
+    'grams': { 
+      name: 'Зона граммовки', 
+      positive: 2, 
+      negative: -2,
+      question: cardsData.zones?.grams || "Назовите точный вес ингредиента для этого блюда в граммах."
+    },
+    'description': { 
+      name: 'Зона красочного описания', 
+      positive: 1, 
+      negative: -3,
+      question: cardsData.zones?.description || "Дайте красочное описание этого блюда или напитка, чтобы вызвать аппетит у гостя."
+    },
+    'allergy': { 
+      name: 'Зона аллергии', 
+      positive: 1, 
+      negative: -5,
+      question: cardsData.zones?.allergy || "Можно ли убрать этот ингредиент из блюда без ущерба для вкуса? Почему?"
+    }
+  };
+  
+  return zoneSettings[zoneType] || zoneSettings['grams'];
 }
 
 server.on('error', (error) => {
