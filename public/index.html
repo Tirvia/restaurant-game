@@ -33,6 +33,31 @@
             from { transform: translateX(-50%) translateY(0); opacity: 1; }
             to { transform: translateX(-50%) translateY(-20px); opacity: 0; }
         }
+
+        /* Стили для изображений карт */
+        .deck-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 10px;
+            transition: transform 0.3s ease;
+        }
+
+        .deck:hover .deck-image {
+            transform: scale(1.05);
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
     </style>
 </head>
 <body>
@@ -107,14 +132,17 @@
         <div class="main-game-area">
             <!-- Колоды карт слева -->
             <div class="decks-left">
-                <div class="deck" id="kitchen-deck" data-type="1">
-                    <div class="deck-label">Кухня</div>
+                <div class="deck" id="kitchen-deck" data-type="1" aria-label="Кухня">
+                    <img src="cards/1.png" alt="Кухня" class="deck-image">
+                    <span class="sr-only">Кухня</span>
                 </div>
-                <div class="deck" id="bar-deck" data-type="2">
-                    <div class="deck-label">Бар</div>
+                <div class="deck" id="bar-deck" data-type="2" aria-label="Бар">
+                    <img src="cards/2.png" alt="Бар" class="deck-image">
+                    <span class="sr-only">Бар</span>
                 </div>
-                <div class="deck" id="knowledge-deck" data-type="3">
-                    <div class="deck-label">Знания</div>
+                <div class="deck" id="knowledge-deck" data-type="3" aria-label="Знания">
+                    <img src="cards/3.png" alt="Знания" class="deck-image">
+                    <span class="sr-only">Знания</span>
                 </div>
             </div>
 
@@ -132,14 +160,17 @@
 
             <!-- Колоды карт справа -->
             <div class="decks-right">
-                <div class="deck" id="situation-deck" data-type="4">
-                    <div class="deck-label">Ситуация</div>
+                <div class="deck" id="situation-deck" data-type="4" aria-label="Ситуация">
+                    <img src="cards/4.png" alt="Ситуация" class="deck-image">
+                    <span class="sr-only">Ситуация</span>
                 </div>
-                <div class="deck" id="service-deck" data-type="5">
-                    <div class="deck-label">Сервис</div>
+                <div class="deck" id="service-deck" data-type="5" aria-label="Сервис">
+                    <img src="cards/5.png" alt="Сервис" class="deck-image">
+                    <span class="sr-only">Сервис</span>
                 </div>
-                <div class="deck" id="sales-deck" data-type="6">
-                    <div class="deck-label">Продажи</div>
+                <div class="deck" id="sales-deck" data-type="6" aria-label="Продажи">
+                    <img src="cards/6.png" alt="Продажи" class="deck-image">
+                    <span class="sr-only">Продажи</span>
                 </div>
             </div>
         </div>
