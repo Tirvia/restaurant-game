@@ -327,7 +327,7 @@ body {
 
 .deck {
     height: 180px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: #333;
     border-radius: 10px;
     display: flex;
     align-items: center;
@@ -344,14 +344,16 @@ body {
     box-shadow: 0 10px 20px rgba(0,0,0,0.3);
 }
 
-.deck-label {
-    font-size: 16px;
-    font-weight: bold;
-    text-align: center;
-    padding: 8px;
-    background: rgba(0,0,0,0.7);
-    border-radius: 5px;
+.deck-image {
     width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 10px;
+    transition: transform 0.3s ease;
+}
+
+.deck:hover .deck-image {
+    transform: scale(1.05);
 }
 
 .game-board {
@@ -1440,11 +1442,6 @@ body {
         height: 100px;
     }
     
-    .deck-label {
-        font-size: 14px;
-        padding: 6px;
-    }
-    
     .game-board {
         height: 450px;
         margin: 10px 0;
@@ -1670,10 +1667,6 @@ body {
         height: 80px;
     }
     
-    .deck-label {
-        font-size: 12px;
-    }
-    
     .game-board {
         height: 350px;
         padding: 10px;
@@ -1769,4 +1762,17 @@ body {
 
 .close-alert:hover {
     background: rgba(255, 255, 255, 0.2);
+}
+
+/* Стиль для скрытого текста (доступность) */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
