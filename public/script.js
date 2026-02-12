@@ -1,4 +1,4 @@
-// Полный исправленный script.js с поддержкой видеозвонков через PeerJS
+// Полный исправленный script.js с поддержкой видеозвонков через PeerJS (публичный сервер)
 // Все игровые методы и обработчики сокета включены
 
 class Game {
@@ -407,76 +407,68 @@ class Game {
         });
     }
 
-    // ========== PeerJS с исправлением для кириллицы ==========
+    // ========== PeerJS — всегда используем публичный сервер ==========
     async initPeer() {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             try {
-                // Санитизация имени игрока для формирования валидного PeerID
                 const safePlayerName = this.sanitizeString(this.playerName) || 'player';
                 const peerId = `${safePlayerName}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-                // Пробуем подключиться к локальному Peer‑серверу (ваш сервер)
+                // Используем только публичный PeerJS сервер (надёжнее для Railway)
                 this.peer = new Peer(peerId, {
-                    host: window.location.hostname,
-                    port: window.location.port || (window.location.protocol === 'https:' ? 443 : 80),
-                    path: '/peerjs',
-                    secure: window.location.protocol === 'https:'
+                    host: '0.peerjs.com',
+                    port: 443,
+                    path: '/',
+                    secure: true,
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' }
+                        ]
+                    },
+                    debug: 2 // для диагностики
                 });
 
                 this.peer.on('open', (id) => {
-                    console.log('✅ PeerJS подключен, ID:', id);
+                    console.log('✅ PeerJS (публичный) подключен, ID:', id);
                     this.myPeerId = id;
                     resolve();
                 });
 
                 this.peer.on('error', (error) => {
                     console.error('❌ PeerJS ошибка:', error);
-                    // Если локальный сервер недоступен, используем публичный
-                    if (error.type === 'unavailable-id' || error.type === 'network' || error.message?.includes('invalid')) {
-                        console.log('🔄 Переключаемся на публичный PeerJS сервер');
-                        this.peer = new Peer(peerId, {
-                            host: '0.peerjs.com',
-                            port: 443,
-                            path: '/',
-                            secure: true,
-                            config: { 'iceServers': [{ url: 'stun:stun.l.google.com:19302' }] }
-                        });
-                        this.peer.on('open', (id) => {
-                            console.log('✅ PeerJS (публичный) подключен, ID:', id);
-                            this.myPeerId = id;
-                            resolve();
-                        });
-                        this.peer.on('error', (err) => {
-                            console.error('❌ Ошибка публичного PeerJS:', err);
-                            reject(err);
-                        });
-                    } else {
-                        reject(error);
-                    }
+                    // Не удалось подключиться к публичному серверу – продолжаем без видео
+                    this.showNotification('Не удалось подключиться к серверу видеозвонков. Видео не будет работать.', 'warning');
+                    // Генерируем "фейковый" ID, чтобы игра продолжалась
+                    this.myPeerId = `offline-${Date.now()}`;
+                    resolve(); // всё равно резолвим, чтобы не блокировать игру
                 });
 
                 this.peer.on('call', (call) => {
-                    console.log('📞 Входящий звонок от:', call.peer);
                     if (this.localStream) {
                         call.answer(this.localStream);
                         call.on('stream', (remoteStream) => {
-                            console.log('📹 Получен удаленный поток от:', call.peer);
                             this.displayRemoteStream(call.peer, remoteStream);
-                        });
-                        call.on('close', () => {
-                            console.log('🔇 Звонок закрыт:', call.peer);
-                            this.connections.delete(call.peer);
                         });
                         this.connections.set(call.peer, call);
                     }
                 });
             } catch (error) {
-                reject(error);
+                console.error('❌ Критическая ошибка PeerJS:', error);
+                this.showNotification('Ошибка инициализации видеозвонков. Игра продолжается без видео.', 'warning');
+                this.myPeerId = `error-${Date.now()}`;
+                resolve();
             }
         });
     }
 
     connectToAllPeers(participants) {
+        // Если peer не в открытом состоянии или у нас фейковый ID, не пытаемся звонить
+        if (!this.peer || this.peer.disconnected || this.myPeerId?.startsWith('offline-') || this.myPeerId?.startsWith('error-')) {
+            console.log('⚠️ PeerJS не в сети, видеозвонки недоступны');
+            return;
+        }
+
         const peers = [];
         if (participants.master && participants.master.peerId && participants.master.peerId !== this.myPeerId) {
             peers.push({ role: 'master', peerId: participants.master.peerId, name: participants.master.name });
@@ -504,6 +496,10 @@ class Game {
     callPeer(peerId) {
         if (!this.localStream) {
             console.log('⚠️ Нет локального потока, пропускаем звонок');
+            return;
+        }
+        if (!this.peer || this.peer.disconnected) {
+            console.log('⚠️ PeerJS не готов, пропускаем звонок');
             return;
         }
         const call = this.peer.call(peerId, this.localStream);
