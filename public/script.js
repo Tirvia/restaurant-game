@@ -1853,7 +1853,7 @@ class Game {
         const statusDiv = modal.querySelector('#connection-status');
         
         this.socket = io(this.serverUrl, {
-            transports: ['websocket', 'polling'],
+            transports: ['polling'],
             reconnection: true,
             reconnectionAttempts: 5,
             reconnectionDelay: 1000
