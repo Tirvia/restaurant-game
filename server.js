@@ -261,6 +261,8 @@ io.on('connection', (socket) => {
         activatedZones: { 1: [], 2: [] }, // Храним активированные зоны за ход
         isSpecialZoneActive: false // Флаг активной специальной зоны
       },
+      // Очередь специальных зон (теперь на сервере)
+      specialZoneQueue: [],
       createdAt: Date.now(),
       lastActivity: Date.now(),
       finished: false,
@@ -303,6 +305,7 @@ io.on('connection', (socket) => {
         code: 'ROOM_NOT_FOUND', 
         message: 'Комната не найдена' 
       });
+      console.log(`❌ Ошибка: комната ${roomCode} не найдена для ${playerName}`);
       return;
     }
 
@@ -332,7 +335,6 @@ io.on('connection', (socket) => {
     }
 
     let assignedRole = role;
-    let success = false;
     
     if (role === 'player') {
       // Автоназначение игрока
@@ -343,7 +345,6 @@ io.on('connection', (socket) => {
           name: playerName,
           joinedAt: Date.now()
         };
-        success = true;
       } else if (!room.player2) {
         assignedRole = 'player2';
         room.player2 = { 
@@ -351,7 +352,6 @@ io.on('connection', (socket) => {
           name: playerName,
           joinedAt: Date.now()
         };
-        success = true;
       } else {
         // Мест для игроков нет, предлагаем роль наблюдателя
         socket.emit('role-unavailable', {
@@ -367,7 +367,6 @@ io.on('connection', (socket) => {
         joinedAt: Date.now()
       });
       assignedRole = 'spectator';
-      success = true;
     } else {
       socket.emit('error', { 
         code: 'INVALID_ROLE', 
@@ -432,8 +431,9 @@ io.on('connection', (socket) => {
     console.log(`✅ ${playerName} присоединился как ${assignedRole} в комнату ${roomCode}`);
   });
 
-  // Проверка комнаты
+  // Проверка комнаты (улучшена: добавлено логирование)
   socket.on('check-room', (roomCode) => {
+    console.log(`🔍 Проверка комнаты: ${roomCode} от ${socket.id}`);
     const room = rooms.get(roomCode);
     if (room) {
       socket.emit('room-status', {
@@ -454,11 +454,13 @@ io.on('connection', (socket) => {
         gameStarted: room.state.gameStarted,
         created: new Date(room.createdAt).toLocaleString()
       });
+      console.log(`✅ Комната ${roomCode} найдена, отправлен статус`);
     } else {
       socket.emit('room-status', {
         exists: false,
         code: roomCode
       });
+      console.log(`❌ Комната ${roomCode} не найдена`);
     }
   });
 
@@ -623,7 +625,7 @@ io.on('connection', (socket) => {
     console.log(`👑 Ведущий начал оценивание в комнате ${roomCode}`);
   });
 
-  // Проверка специальной зоны
+  // Проверка специальной зоны (теперь управляется сервером)
   socket.on('check-special-zone', ({ team, position }) => {
     const { roomCode } = socket.data;
     if (!roomCode) return;
@@ -633,20 +635,60 @@ io.on('connection', (socket) => {
     
     const zoneType = getZoneType(position);
     if (zoneType && !room.state.activatedZones[team].includes(zoneType)) {
+      // Помечаем зону как активированную в этом ходе
       room.state.activatedZones[team].push(zoneType);
-      room.state.isSpecialZoneActive = true;
       
+      // Добавляем в очередь
       const zoneData = getZoneData(zoneType);
-      io.to(roomCode).emit('special-zone', {
+      const priority = team === room.state.currentPlayer ? 1 : 2; // активная команда первой
+      room.specialZoneQueue.push({
         team,
         zoneType,
         zoneName: zoneData.name,
         question: zoneData.question,
         positive: zoneData.positive,
-        negative: zoneData.negative
+        negative: zoneData.negative,
+        priority
       });
+      
+      // Сортируем очередь по приоритету
+      room.specialZoneQueue.sort((a, b) => a.priority - b.priority);
+      
+      console.log(`🎯 Зона ${zoneType} добавлена в очередь комнаты ${roomCode}. Приоритет: ${priority}`);
+      
+      // Если нет активной зоны, отправляем первую из очереди
+      if (!room.state.isSpecialZoneActive) {
+        sendNextSpecialZone(roomCode);
+      }
     }
   });
+
+  // Функция для отправки следующей специальной зоны
+  function sendNextSpecialZone(roomCode) {
+    const room = rooms.get(roomCode);
+    if (!room) return;
+    
+    if (room.specialZoneQueue.length === 0) {
+      room.state.isSpecialZoneActive = false;
+      return;
+    }
+    
+    // Берем следующую зону
+    const nextZone = room.specialZoneQueue.shift();
+    room.state.isSpecialZoneActive = true;
+    
+    // Отправляем всем в комнате
+    io.to(roomCode).emit('special-zone', {
+      team: nextZone.team,
+      zoneType: nextZone.zoneType,
+      zoneName: nextZone.zoneName,
+      question: nextZone.question,
+      positive: nextZone.positive,
+      negative: nextZone.negative
+    });
+    
+    console.log(`📤 Отправлена специальная зона ${nextZone.zoneType} для команды ${nextZone.team} в комнате ${roomCode}`);
+  }
 
   // Результат специальной зоны
   socket.on('special-zone-result', (data) => {
@@ -670,7 +712,6 @@ io.on('connection', (socket) => {
     }
     
     room.state.positions[team] = newPosition;
-    room.state.isSpecialZoneActive = false;
     room.lastActivity = Date.now();
     
     // Отправляем обновленное состояние всем
@@ -719,6 +760,13 @@ io.on('connection', (socket) => {
         scores: room.state.scores,
         message: `🎉 Победила команда ${team} (${winnerName})!`
       });
+    }
+    
+    // Отправляем следующую зону из очереди, если есть
+    if (room.specialZoneQueue.length > 0) {
+      sendNextSpecialZone(roomCode);
+    } else {
+      room.state.isSpecialZoneActive = false;
     }
     
     console.log(`🎯 Результат специальной зоны в комнате ${roomCode}: команда ${team} получила ${points} очков`);
@@ -810,13 +858,19 @@ io.on('connection', (socket) => {
       room.state.waitingForAnswer = false;
       room.state.currentQuestion = null;
       room.state.currentQuestionCategory = null;
-      room.state.activatedZones = { 1: [], 2: [] };
+      room.state.activatedZones = { 1: [], 2: [] }; // Сбрасываем активированные зоны
+      // Очищаем очередь специальных зон (они уже обработаны или сброшены)
+      room.specialZoneQueue = [];
+      room.state.isSpecialZoneActive = false;
       room.lastActivity = Date.now();
       
       // Останавливаем таймер
       stopTimer(roomCode);
       
       const nextPlayerName = room.state.currentPlayer === 1 ? room.player1?.name : room.player2?.name;
+      
+      // Отправляем обновлённое состояние игры ВСЕМ (синхронизация позиций)
+      io.to(roomCode).emit('game-updated', room.state);
       
       io.to(roomCode).emit('turn-changed', {
         currentPlayer: room.state.currentPlayer,
@@ -852,6 +906,7 @@ io.on('connection', (socket) => {
         activatedZones: { 1: [], 2: [] },
         isSpecialZoneActive: false
       };
+      room.specialZoneQueue = [];
       room.finished = false;
       room.winner = null;
       room.winnerName = null;
