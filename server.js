@@ -9,9 +9,12 @@ const app = express();
 const server = http.createServer(app);
 
 // ========== PeerJS сервер ==========
+// Настройки для работы за прокси/балансировщиком (Railway, Heroku и т.п.)
 const peerServer = ExpressPeerServer(server, {
   debug: true,
-  path: '/peerjs'
+  path: '/peerjs',
+  allow_discovery: true,   // разрешает регистрацию через прокси
+  proxied: true           // указывает, что сервер работает за прокси
 });
 app.use('/peerjs', peerServer);
 
@@ -30,7 +33,8 @@ const io = socketIo(server, {
     methods: ["GET", "POST"],
     credentials: true
   },
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'], // разрешаем оба транспорта
+  allowEIO3: true
 });
 
 // ========== Статические файлы ==========
