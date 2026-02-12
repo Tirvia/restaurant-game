@@ -78,8 +78,9 @@ class Game {
         // Для специальных зон
         this.specialZoneData = null;
         
-        // Инициализация UI компонентов
-        this.connectionInfo = null;
+        // Флаги анимации для каждой команды (чтобы не конфликтовать)
+        this.teamAnimationInProgress = { 1: false, 2: false };
+        this.animationQueue = { 1: [], 2: [] };
         
         this.init();
     }
@@ -417,8 +418,8 @@ class Game {
             statusDiv.style.color = '#4CAF50';
             console.log('✅ Подключено к серверу');
             
-            // Создаем информационную панель подключения
-            this.createConnectionInfo();
+            // Обновляем статическую панель connection-info
+            this.updateConnectionInfoUI();
         });
         
         this.socket.on('connect_error', (error) => {
@@ -473,7 +474,7 @@ class Game {
             }, 2000);
             
             // Обновляем информацию о подключении
-            this.updateConnectionInfo();
+            this.updateConnectionInfoUI();
         });
         
         this.socket.on('join-success', (data) => {
@@ -502,7 +503,7 @@ class Game {
             }, 2000);
             
             // Обновляем информацию о подключении
-            this.updateConnectionInfo();
+            this.updateConnectionInfoUI();
         });
         
         this.socket.on('player-joined', (data) => {
@@ -511,6 +512,7 @@ class Game {
             if (data.players) {
                 this.updatePlayers(data.players);
             }
+            this.updateConnectionInfoUI();
         });
         
         this.socket.on('player-left', (data) => {
@@ -527,14 +529,17 @@ class Game {
             }
             
             this.updateMasterPanelNames();
+            this.updateConnectionInfoUI();
         });
         
         this.socket.on('spectator-joined', (data) => {
             this.showNotification(`${data.playerName} присоединился как наблюдатель`, 'info');
+            this.updateConnectionInfoUI();
         });
         
         this.socket.on('spectator-left', (data) => {
             this.showNotification(`${data.playerName} покинул комнату как наблюдатель`, 'info');
+            this.updateConnectionInfoUI();
         });
         
         this.socket.on('room-closed', (message) => {
@@ -629,11 +634,13 @@ class Game {
                 setTimeout(() => modal.remove(), 300);
             }
             
-            this.positions[data.team] = data.newPosition;
-            this.scores[data.team] = data.scores[data.team];
+            // Анимируем движение фишки
+            this.animatePositionFromServer(data.team, data.newPosition);
             
+            // Обновляем очки
+            this.scores[data.team] = data.scores[data.team];
             this.updateScores();
-            this.updatePieces();
+            
             this.isSpecialZoneActive = false;
             this.specialZoneData = null;
             
@@ -653,14 +660,29 @@ class Game {
         
         this.socket.on('game-updated', (gameState) => {
             console.log('🔄 Обновление состояния игры:', gameState);
+            
+            // Обновляем очки и текущего игрока
             this.scores = gameState.scores || this.scores;
-            this.positions = gameState.positions || this.positions;
             this.currentPlayer = gameState.currentPlayer || this.currentPlayer;
             this.diceResult = gameState.diceResult || this.diceResult;
             this.isSpecialZoneActive = gameState.isSpecialZoneActive || false;
             
+            // Анимируем движение фишек, если позиции изменились
+            for (let team of [1, 2]) {
+                if (gameState.positions && gameState.positions[team] !== undefined) {
+                    if (this.positions[team] !== gameState.positions[team]) {
+                        this.animatePositionFromServer(team, gameState.positions[team]);
+                    } else {
+                        // Если позиция не изменилась, просто обновляем очки и всё
+                    }
+                }
+            }
+            
+            // Обновляем позиции в объекте (после анимации они обновятся в колбэке)
+            // Но мы сохраняем новые позиции отдельно, а анимация обновит this.positions по завершению
+            this.newPositionsFromServer = { ...gameState.positions };
+            
             this.updateScores();
-            this.updatePieces();
             this.updateTurnIndicator();
             
             const diceElement = document.getElementById('dice');
@@ -747,50 +769,27 @@ class Game {
         });
     }
 
-    createConnectionInfo() {
-        // Создаем информационную панель подключения
-        this.connectionInfo = document.createElement('div');
-        this.connectionInfo.className = 'connection-info';
-        this.connectionInfo.innerHTML = `
-            <div class="connection-status ${this.isConnected ? 'connected' : 'disconnected'}">
-                <i class="fas fa-circle"></i>
-                <span>${this.isConnected ? 'Подключено' : 'Не подключено'}</span>
-            </div>
-            <div class="room-info">
-                <i class="fas fa-door-closed"></i>
-                <span>Комната: ${this.roomCode || 'Нет'}</span>
-            </div>
-            <div class="player-info">
-                <i class="fas fa-user"></i>
-                <span>${this.playerName} (${this.getRoleName()})</span>
-            </div>
-        `;
+    // Обновление статической панели connection-info
+    updateConnectionInfoUI() {
+        const connectionInfo = document.querySelector('.connection-info.horizontal');
+        if (!connectionInfo) return;
         
-        const topPanel = document.querySelector('.top-panel');
-        if (topPanel) {
-            topPanel.appendChild(this.connectionInfo);
-        }
-    }
-
-    updateConnectionInfo() {
-        if (!this.connectionInfo) return;
+        const statusSpan = connectionInfo.querySelector('.connection-status span');
+        const roomSpan = connectionInfo.querySelector('.room-info span');
+        const playerSpan = connectionInfo.querySelector('.player-info span');
         
-        const connectionStatus = this.connectionInfo.querySelector('.connection-status');
-        const roomInfo = this.connectionInfo.querySelector('.room-info span');
-        const playerInfo = this.connectionInfo.querySelector('.player-info span');
-        
-        if (connectionStatus) {
-            connectionStatus.className = `connection-status ${this.isConnected ? 'connected' : 'disconnected'}`;
-            connectionStatus.querySelector('i').className = `fas fa-circle`;
-            connectionStatus.querySelector('span').textContent = this.isConnected ? 'Подключено' : 'Не подключено';
+        if (statusSpan) {
+            statusSpan.textContent = this.isConnected ? 'Подключено' : 'Не подключено';
+            const statusDiv = connectionInfo.querySelector('.connection-status');
+            statusDiv.className = `connection-status ${this.isConnected ? 'connected' : 'disconnected'}`;
         }
         
-        if (roomInfo) {
-            roomInfo.textContent = `Комната: ${this.roomCode || 'Нет'}`;
+        if (roomSpan) {
+            roomSpan.textContent = `Комната: ${this.roomCode || 'Нет'}`;
         }
         
-        if (playerInfo) {
-            playerInfo.textContent = `${this.playerName} (${this.getRoleName()})`;
+        if (playerSpan) {
+            playerSpan.textContent = `${this.playerName || 'Игрок'} (${this.getRoleName()})`;
         }
     }
 
@@ -811,6 +810,7 @@ class Game {
         
         this.updateVideoPlaceholders();
         this.updateMasterPanelNames();
+        this.updateConnectionInfoUI();
     }
 
     updateMasterPanelNames() {
@@ -1075,6 +1075,11 @@ class Game {
         const container = document.getElementById('cells-container');
         if (!container) return;
         
+        // Удаляем старые метки, если есть
+        const oldLabels = container.querySelectorAll('.zone-label');
+        oldLabels.forEach(label => label.remove());
+        
+        // Сдвиг вправо на 90px (увеличен offsetX в generateBoardPositions)
         const gramsLabel = document.createElement('div');
         gramsLabel.className = 'zone-label';
         gramsLabel.style.cssText = `
@@ -1093,7 +1098,7 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         gramsLabel.textContent = 'Зона граммовки ±2';
-        gramsLabel.style.left = '120px';
+        gramsLabel.style.left = '210px'; // было 120px, +90
         gramsLabel.style.top = '450px';
         container.appendChild(gramsLabel);
         
@@ -1114,7 +1119,7 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         descLabel.textContent = 'Зона красочного описания +1/-3';
-        descLabel.style.left = '195px';
+        descLabel.style.left = '285px'; // было 195px, +90
         descLabel.style.top = '30px';
         container.appendChild(descLabel);
         
@@ -1135,7 +1140,7 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         allergyLabel.textContent = 'Зона аллергии +1/-5';
-        allergyLabel.style.left = '540px';
+        allergyLabel.style.left = '630px'; // было 540px, +90
         allergyLabel.style.top = '380px';
         container.appendChild(allergyLabel);
     }
@@ -1175,8 +1180,7 @@ class Game {
         const circleRadius = 160;
         
         const totalSteps = 14;
-        const totalAngle = 360;
-        const angleStep = totalAngle / totalSteps;
+        const angleStep = 360 / totalSteps;
         
         positions[26] = {
             x: circleCenterX + circleRadius * Math.cos(-120 * Math.PI / 180),
@@ -1197,7 +1201,7 @@ class Game {
         positions[40] = { x: 790, y: 170 };
 
         const scale = 0.7;
-        const offsetX = 50;
+        const offsetX = 140; // УВЕЛИЧЕНО с 50 до 140 (сдвиг вправо на 90px)
         const offsetY = 100;
 
         for (let i = 0; i <= 40; i++) {
@@ -1589,7 +1593,7 @@ class Game {
                 panel.style.transform = 'translateX(-50%) translateY(0)';
             });
             
-            // Обновляем видимость кнопок
+            // Обновляем видимость кнопок и подсветку
             this.updateMasterPanelButtons();
         }
         
@@ -1671,14 +1675,10 @@ class Game {
         this.updateSelectionDisplay(team);
     }
 
+    // Обновление панели ведущего: видимость кнопок и подсветка текущей команды
     updateMasterPanelButtons() {
         const activeTeam = this.currentPlayer;
         const inactiveTeam = activeTeam === 1 ? 2 : 1;
-        
-        // Показываем все кнопки для активной команды
-        document.querySelectorAll(`.point-btn.compact[data-team="${activeTeam}"]`).forEach(btn => {
-            btn.classList.remove('hidden');
-        });
         
         // Скрываем кнопки +3 и -3 для неактивной команды
         document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="3"]`).forEach(btn => {
@@ -1687,7 +1687,6 @@ class Game {
         document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="-3"]`).forEach(btn => {
             btn.classList.add('hidden');
         });
-        
         // Показываем остальные кнопки для неактивной команды
         document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="1"]`).forEach(btn => {
             btn.classList.remove('hidden');
@@ -1701,6 +1700,20 @@ class Game {
         document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="-2"]`).forEach(btn => {
             btn.classList.remove('hidden');
         });
+        
+        // Показываем все кнопки для активной команды
+        document.querySelectorAll(`.point-btn.compact[data-team="${activeTeam}"]`).forEach(btn => {
+            btn.classList.remove('hidden');
+        });
+        
+        // Подсветка строки текущей команды
+        document.querySelectorAll('.team-control-row').forEach(row => {
+            row.classList.remove('current-team-row');
+        });
+        const activeRow = document.getElementById(`team-control-row-${activeTeam}`);
+        if (activeRow) {
+            activeRow.classList.add('current-team-row');
+        }
     }
 
     nextTurn() {
@@ -1769,10 +1782,16 @@ class Game {
         this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
     }
 
-    movePiece(team, points, isSpecialZone = false) {
-        if (this.animationInProgress) {
-            console.log('Анимация уже выполняется, ждем...');
-            setTimeout(() => this.movePiece(team, points, isSpecialZone), 100);
+    // Метод для анимации движения фишки (общий для локального и сетевого)
+    // skipEffects = true означает, что не нужно проверять специальные зоны и т.д. (используется при обновлении с сервера)
+    movePiece(team, points, isSpecialZone = false, skipEffects = false) {
+        if (this.teamAnimationInProgress[team]) {
+            // Если анимация уже идет, ставим в очередь
+            this.animationQueue[team].push({
+                points,
+                isSpecialZone,
+                skipEffects
+            });
             return;
         }
         
@@ -1783,14 +1802,16 @@ class Game {
         const delta = newPosition - this.positions[team];
         
         if (delta === 0) {
+            // Выполняем следующую анимацию из очереди
+            this.processNextInQueue(team);
             return;
         }
         
-        this.animationInProgress = true;
+        this.teamAnimationInProgress[team] = true;
         
-        // ТОЛЬКО для специальных зон начисляем очки в movePiece
+        // ТОЛЬКО для специальных зон начисляем очки в movePiece, если не skipEffects
         // Для обычных ходов очки начисляются в nextTurn
-        if (isSpecialZone) {
+        if (isSpecialZone && !skipEffects) {
             if (delta > 0) {
                 this.scores[team] += delta;
             } else if (delta < 0) {
@@ -1798,41 +1819,64 @@ class Game {
             }
         }
         
+        const fromPosition = this.positions[team];
         this.positions[team] = newPosition;
         
-        this.updateScores();
-        this.animatePieceMovement(team, this.positions[team] - delta, newPosition, () => {
-            this.animationInProgress = false;
-            this.updatePieces();
+        if (!skipEffects) {
+            this.updateScores();
+        }
+        
+        this.animatePieceMovement(team, fromPosition, newPosition, () => {
+            this.teamAnimationInProgress[team] = false;
+            this.updatePieces(); // точная установка после анимации
             
-            if (Math.abs(points) <= 6 && !isSpecialZone) {
-                this.checkSpecialZone(team, newPosition);
-            }
-            
-            if (newPosition >= 40) {
-                const winnerName = team === 1 ? this.players.player1 : this.players.player2;
-                this.showWinner(team, winnerName, `🎉 Победила команда ${team} (${winnerName})!`);
-            }
-            
-            if (this.gameMode === 'online' && this.socket && this.isConnected) {
-                const gameState = {
-                    scores: this.scores,
-                    positions: this.positions,
-                    currentPlayer: this.currentPlayer
-                };
-                this.socket.emit('update-game', gameState);
-                
+            if (!skipEffects) {
                 if (Math.abs(points) <= 6 && !isSpecialZone) {
-                    this.socket.emit('check-special-zone', { team, position: newPosition });
+                    this.checkSpecialZone(team, newPosition);
+                }
+                
+                if (newPosition >= 40) {
+                    const winnerName = team === 1 ? this.players.player1 : this.players.player2;
+                    this.showWinner(team, winnerName, `🎉 Победила команда ${team} (${winnerName})!`);
+                }
+                
+                if (this.gameMode === 'online' && this.socket && this.isConnected) {
+                    const gameState = {
+                        scores: this.scores,
+                        positions: this.positions,
+                        currentPlayer: this.currentPlayer
+                    };
+                    this.socket.emit('update-game', gameState);
+                    
+                    if (Math.abs(points) <= 6 && !isSpecialZone) {
+                        this.socket.emit('check-special-zone', { team, position: newPosition });
+                    }
                 }
             }
+            
+            // После завершения анимации запускаем следующую из очереди
+            this.processNextInQueue(team);
         });
+    }
+
+    // Анимация движения от сервера (без эффектов)
+    animatePositionFromServer(team, newPosition) {
+        if (this.positions[team] === newPosition) return;
+        
+        const delta = newPosition - this.positions[team];
+        this.movePiece(team, delta, false, true);
+    }
+
+    processNextInQueue(team) {
+        if (this.animationQueue[team].length > 0) {
+            const next = this.animationQueue[team].shift();
+            this.movePiece(team, next.points, next.isSpecialZone, next.skipEffects);
+        }
     }
 
     animatePieceMovement(team, fromPosition, toPosition, callback) {
         const piece = document.getElementById(`piece${team}`);
         if (!piece) {
-            this.animationInProgress = false;
             if (callback) callback();
             return;
         }
@@ -1842,7 +1886,6 @@ class Game {
         const direction = toPosition > fromPosition ? 1 : -1;
         
         if (steps === 0) {
-            this.animationInProgress = false;
             if (callback) callback();
             return;
         }
@@ -1851,7 +1894,6 @@ class Game {
         
         const moveNext = () => {
             if (currentStep >= steps) {
-                this.animationInProgress = false;
                 if (callback) callback();
                 return;
             }
@@ -2001,7 +2043,7 @@ class Game {
         if (isMaster) {
             modal.querySelector('#special-correct').addEventListener('click', () => {
                 const points = data.positive;
-                this.movePiece(data.team, points, true);
+                this.movePiece(data.team, points, true, false);
                 
                 if (this.gameMode === 'online' && this.socket && this.isConnected) {
                     this.socket.emit('special-zone-result', {
@@ -2024,7 +2066,7 @@ class Game {
 
             modal.querySelector('#special-incorrect').addEventListener('click', () => {
                 const points = data.negative;
-                this.movePiece(data.team, points, true);
+                this.movePiece(data.team, points, true, false);
                 
                 if (this.gameMode === 'online' && this.socket && this.isConnected) {
                     this.socket.emit('special-zone-result', {
@@ -2213,11 +2255,9 @@ class Game {
         });
 
         this.updateRollButton();
-
-        // Создаем информационную панель подключения для онлайн-игры
-        if (this.gameMode === 'online') {
-            this.createConnectionInfo();
-        }
+        
+        // Обновляем панель connection-info
+        this.updateConnectionInfoUI();
     }
 
     getRoleName() {
