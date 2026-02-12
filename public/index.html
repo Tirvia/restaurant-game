@@ -86,10 +86,10 @@
             </div>
         </div>
 
-        <!-- Верхняя панель с информацией (УМЕНЬШЕНА) -->
+        <!-- Верхняя панель с информацией (ПЕРЕДЕЛАНА) -->
         <div class="top-panel">
-            <!-- Информация о подключении в столбик слева -->
-            <div class="connection-info">
+            <!-- Информация о подключении в строчку слева -->
+            <div class="connection-info horizontal">
                 <div class="connection-status connected">
                     <i class="fas fa-circle"></i>
                     <span>Подключено</span>
@@ -205,7 +205,7 @@
             </div>
             
             <div class="compact-controls">
-                <div class="team-control-row">
+                <div class="team-control-row" id="team-control-row-1">
                     <div class="team-label" style="color: #2196F3;">
                         <i class="fas fa-user-circle"></i>
                         <span id="master-team1-name">Команда 1: Ожидает</span>
@@ -228,7 +228,7 @@
                     </div>
                 </div>
                 
-                <div class="team-control-row">
+                <div class="team-control-row" id="team-control-row-2">
                     <div class="team-label" style="color: #FF5722;">
                         <i class="fas fa-user-circle"></i>
                         <span id="master-team2-name">Команда 2: Ожидает</span>
