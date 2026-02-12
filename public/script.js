@@ -1,4 +1,4 @@
-// Полный script.js с поддержкой видеозвонков через PeerJS
+// Полный исправленный script.js с поддержкой видеозвонков через PeerJS
 // Все игровые методы и обработчики сокета включены
 
 class Game {
@@ -89,6 +89,15 @@ class Game {
         this.animationQueue = { 1: [], 2: [] };
         
         this.init();
+    }
+
+    // --- Вспомогательная функция для очистки строки для PeerJS ID ---
+    sanitizeString(str) {
+        if (!str) return 'player';
+        return str
+            .replace(/[^a-zA-Z0-9_-]/g, '-')   // заменяем недопустимые символы на дефис
+            .replace(/-+/g, '-')               // убираем повторяющиеся дефисы
+            .replace(/^-|-$/g, '');            // удаляем дефис в начале и конце
     }
 
     async init() {
@@ -398,12 +407,15 @@ class Game {
         });
     }
 
-    // ========== PeerJS ==========
+    // ========== PeerJS с исправлением для кириллицы ==========
     async initPeer() {
         return new Promise((resolve, reject) => {
             try {
-                const peerId = `${this.playerName}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-                
+                // Санитизация имени игрока для формирования валидного PeerID
+                const safePlayerName = this.sanitizeString(this.playerName) || 'player';
+                const peerId = `${safePlayerName}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+                // Пробуем подключиться к локальному Peer‑серверу (ваш сервер)
                 this.peer = new Peer(peerId, {
                     host: window.location.hostname,
                     port: window.location.port || (window.location.protocol === 'https:' ? 443 : 80),
@@ -419,7 +431,8 @@ class Game {
 
                 this.peer.on('error', (error) => {
                     console.error('❌ PeerJS ошибка:', error);
-                    if (error.type === 'unavailable-id' || error.type === 'network') {
+                    // Если локальный сервер недоступен, используем публичный
+                    if (error.type === 'unavailable-id' || error.type === 'network' || error.message?.includes('invalid')) {
                         console.log('🔄 Переключаемся на публичный PeerJS сервер');
                         this.peer = new Peer(peerId, {
                             host: '0.peerjs.com',
@@ -433,7 +446,10 @@ class Game {
                             this.myPeerId = id;
                             resolve();
                         });
-                        this.peer.on('error', reject);
+                        this.peer.on('error', (err) => {
+                            console.error('❌ Ошибка публичного PeerJS:', err);
+                            reject(err);
+                        });
                     } else {
                         reject(error);
                     }
@@ -556,7 +572,7 @@ class Game {
         }
     }
 
-    // ========== Остальные методы ==========
+    // ========== Остальные методы (без изменений, кроме тех, что уже были) ==========
 
     updateConnectionInfoUI() {
         const connectionInfo = document.querySelector('.connection-info.horizontal');
