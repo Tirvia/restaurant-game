@@ -22,8 +22,7 @@ class Game {
         this.boardHeight = 600;
         this.cellRadius = 20;
         
-        // Переменные для специальных зон теперь не нужны – управляет сервер
-        // Оставляем только флаг, который синхронизируется с сервером
+        // Переменные для специальных зон
         this.isSpecialZoneActive = false;
         
         this.triggeredZonesInTurn = {
@@ -77,6 +76,9 @@ class Game {
         // Флаги анимации для каждой команды
         this.teamAnimationInProgress = { 1: false, 2: false };
         this.animationQueue = { 1: [], 2: [] };
+        
+        // Хранилище медиа-потоков
+        this.localStream = null;
         
         this.init();
     }
@@ -166,6 +168,7 @@ class Game {
     startLocalGame() {
         console.log('🖥️ Запуск локальной игры...');
         
+        // В локальном режиме видео не нужно, скрываем контейнер
         document.querySelector('.video-container').style.display = 'none';
         this.setupLocalInterface();
         this.continueGameInitialization();
@@ -513,12 +516,10 @@ class Game {
             
             if (data.role === 'player1') {
                 this.players.player1 = '';
-                document.querySelector('#video-team1 .video-placeholder p').textContent = 'Команда 1';
-                document.querySelector('#team1-name').textContent = 'Команда 1';
+                this.updateVideoPlaceholders();
             } else if (data.role === 'player2') {
                 this.players.player2 = '';
-                document.querySelector('#video-team2 .video-placeholder p').textContent = 'Команда 2';
-                document.querySelector('#team2-name').textContent = 'Команда 2';
+                this.updateVideoPlaceholders();
             }
             
             this.updateMasterPanelNames();
@@ -663,9 +664,15 @@ class Game {
                 if (gameState.positions && gameState.positions[team] !== undefined) {
                     if (this.positions[team] !== gameState.positions[team]) {
                         this.animatePositionFromServer(team, gameState.positions[team]);
+                    } else {
+                        // Если позиция не изменилась, просто обновляем очки и всё
                     }
                 }
             }
+            
+            // Обновляем позиции в объекте (после анимации они обновятся в колбэке)
+            // Но мы сохраняем новые позиции отдельно, а анимация обновит this.positions по завершению
+            this.newPositionsFromServer = { ...gameState.positions };
             
             this.updateScores();
             this.updateTurnIndicator();
@@ -700,6 +707,7 @@ class Game {
             console.log('⏰ Время вышло!');
             this.waitingForAnswer = false;
             
+            // Автоматически закрываем карточку для отвечающего игрока
             const isAnsweringPlayer = (this.role === 'player1' && this.currentPlayer === 1) || 
                                      (this.role === 'player2' && this.currentPlayer === 2);
             
@@ -809,6 +817,7 @@ class Game {
 
     async continueGameInitialization() {
         console.log('🎥 Инициализируем видео...');
+        // Запускаем инициализацию видео только для онлайн-игры
         if (this.gameMode === 'online') {
             await this.initVideo();
         }
@@ -833,143 +842,231 @@ class Game {
         console.log('🎮 Игра полностью инициализирована!');
     }
 
+    /**
+     * Инициализация камеры и микрофона для текущего игрока.
+     * Отображает видео в соответствующем контейнере, добавляет имя внизу и цветную рамку.
+     */
     async initVideo() {
+        // Сначала останавливаем предыдущий поток, если был
+        if (this.localStream) {
+            this.localStream.getTracks().forEach(track => track.stop());
+            this.localStream = null;
+        }
+
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
+            const constraints = {
                 video: {
                     width: { ideal: 320 },
                     height: { ideal: 240 },
                     facingMode: "user"
                 },
-                audio: false
-            });
-            
-            const videoElement = document.createElement('video');
-            videoElement.autoplay = true;
-            videoElement.muted = true;
-            videoElement.playsInline = true;
-            videoElement.srcObject = stream;
-            
-            const roleMap = {
-                'master': 'video-master',
-                'player1': 'video-team1',
-                'player2': 'video-team2'
+                audio: true // Включаем звук
             };
-            
-            const containerId = roleMap[this.role];
-            if (containerId) {
-                const container = document.getElementById(containerId);
-                if (container) {
-                    const placeholder = container.querySelector('.video-placeholder');
-                    if (placeholder) {
-                        const icon = placeholder.querySelector('i');
-                        if (icon) icon.style.display = 'none';
-                        
-                        const text = placeholder.querySelector('p');
-                        if (text) {
-                            if (this.role === 'master') {
-                                text.innerHTML = `<i class="fas fa-crown"></i> Ведущий: ${this.playerName}`;
-                            } else if (this.role === 'player1') {
-                                text.innerHTML = `<i class="fas fa-user"></i> Команда 1: ${this.playerName}`;
-                            } else if (this.role === 'player2') {
-                                text.innerHTML = `<i class="fas fa-user"></i> Команда 2: ${this.playerName}`;
-                            }
-                        }
-                        
-                        videoElement.style.width = '100%';
-                        videoElement.style.height = '100%';
-                        videoElement.style.objectFit = 'cover';
-                        videoElement.style.borderRadius = '10px';
-                        placeholder.appendChild(videoElement);
-                    }
-                }
+
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            this.localStream = stream;
+
+            // Определяем, в какой контейнер поместить видео
+            const containerId = this.getVideoContainerIdByRole();
+            if (!containerId) {
+                console.log('Нет контейнера для данной роли');
+                return;
             }
 
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const placeholder = container.querySelector('.video-placeholder');
+            if (!placeholder) return;
+
+            // Очищаем placeholder
+            placeholder.innerHTML = '';
+
+            // Создаём видео элемент
+            const video = document.createElement('video');
+            video.autoplay = true;
+            video.muted = true; // чтобы не слышать себя
+            video.playsInline = true;
+            video.srcObject = stream;
+            video.style.width = '100%';
+            video.style.height = '100%';
+            video.style.objectFit = 'cover';
+            video.style.borderRadius = '10px';
+
+            placeholder.appendChild(video);
+
+            // Добавляем подпись с именем внизу
+            const label = document.createElement('div');
+            label.className = 'video-label';
+            label.textContent = this.getRoleDisplayName();
+            placeholder.appendChild(label);
+
+            // Устанавливаем постоянную цветную подсветку в зависимости от роли
+            this.setVideoContainerColor(containerId, this.role);
+
+            console.log(`✅ Видео для ${this.role} инициализировано`);
+
         } catch (error) {
-            console.log('Камера недоступна:', error);
+            console.error('❌ Ошибка доступа к камере/микрофону:', error);
+            this.showNotification('Не удалось получить доступ к камере. Используется демо-режим.', 'warning');
             this.createDemoVideos();
         }
     }
 
+    /**
+     * Возвращает ID контейнера для текущей роли
+     */
+    getVideoContainerIdByRole() {
+        const roleMap = {
+            'master': 'video-master',
+            'player1': 'video-team1',
+            'player2': 'video-team2'
+        };
+        return roleMap[this.role] || null;
+    }
+
+    /**
+     * Возвращает отображаемое имя для текущей роли (с префиксом)
+     */
+    getRoleDisplayName() {
+        switch(this.role) {
+            case 'master': return `Ведущий: ${this.playerName}`;
+            case 'player1': return `Команда 1: ${this.playerName}`;
+            case 'player2': return `Команда 2: ${this.playerName}`;
+            default: return this.playerName;
+        }
+    }
+
+    /**
+     * Устанавливает постоянный цветовой класс для видео-контейнера
+     */
+    setVideoContainerColor(containerId, role) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        // Удаляем предыдущие классы подсветки
+        container.classList.remove('video-team1', 'video-team2', 'video-master');
+
+        // Добавляем соответствующий класс
+        if (role === 'player1') {
+            container.classList.add('video-team1');
+        } else if (role === 'player2') {
+            container.classList.add('video-team2');
+        } else if (role === 'master') {
+            container.classList.add('video-master');
+        }
+    }
+
+    /**
+     * Обновляет видео-контейнеры для всех игроков (заглушки)
+     */
     updateVideoPlaceholders() {
         if (this.gameMode === 'local') return;
 
-        const masterPlaceholder = document.querySelector('#video-master .video-placeholder p');
-        if (masterPlaceholder && this.players.master) {
-            masterPlaceholder.innerHTML = `<i class="fas fa-crown"></i> Ведущий: ${this.players.master}`;
+        // Обновляем контейнер ведущего
+        this.updatePlaceholder('video-master', 'master', this.players.master);
+        
+        // Обновляем контейнер команды 1
+        this.updatePlaceholder('video-team1', 'player1', this.players.player1);
+        
+        // Обновляем контейнер команды 2
+        this.updatePlaceholder('video-team2', 'player2', this.players.player2);
+    }
+
+    /**
+     * Обновляет конкретный плейсхолдер: если у игрока нет видео, показывает заглушку с именем и цветом
+     */
+    updatePlaceholder(containerId, role, playerName) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const placeholder = container.querySelector('.video-placeholder');
+        if (!placeholder) return;
+
+        // Если это наш собственный контейнер и у нас есть видео, не трогаем его
+        if (this.getVideoContainerIdByRole() === containerId && this.localStream) {
+            // Убедимся, что цветовая подсветка установлена
+            this.setVideoContainerColor(containerId, this.role);
+            return;
         }
 
-        const player1Placeholder = document.querySelector('#video-team1 .video-placeholder p');
-        const player1Score = document.querySelector('#team1-name');
-        if (this.players.player1) {
-            if (player1Placeholder) {
-                player1Placeholder.innerHTML = `<i class="fas fa-user"></i> Команда 1: ${this.players.player1}`;
-            }
-            if (player1Score) {
-                player1Score.textContent = `Команда 1: ${this.players.player1}`;
-            }
-        }
+        // Иначе показываем заглушку
+        // Очищаем содержимое
+        placeholder.innerHTML = '';
 
-        const player2Placeholder = document.querySelector('#video-team2 .video-placeholder p');
-        const player2Score = document.querySelector('#team2-name');
-        if (this.players.player2) {
-            if (player2Placeholder) {
-                player2Placeholder.innerHTML = `<i class="fas fa-user"></i> Команда 2: ${this.players.player2}`;
-            }
-            if (player2Score) {
-                player2Score.textContent = `Команда 2: ${this.players.player2}`;
-            }
+        // Создаём иконку
+        const icon = document.createElement('i');
+        icon.className = this.getRoleIcon(role);
+        placeholder.appendChild(icon);
+
+        // Создаём подпись внизу
+        const label = document.createElement('div');
+        label.className = 'video-label';
+        label.textContent = playerName ? this.getRoleDisplayNameForPlaceholder(role, playerName) : this.getDefaultRoleName(role);
+        placeholder.appendChild(label);
+
+        // Устанавливаем цветовую подсветку
+        this.setVideoContainerColor(containerId, role);
+    }
+
+    getRoleIcon(role) {
+        switch(role) {
+            case 'master': return 'fas fa-user-tie';
+            case 'player1': return 'fas fa-user';
+            case 'player2': return 'fas fa-user';
+            default: return 'fas fa-user';
         }
     }
 
+    getRoleDisplayNameForPlaceholder(role, playerName) {
+        switch(role) {
+            case 'master': return `Ведущий: ${playerName}`;
+            case 'player1': return `Команда 1: ${playerName}`;
+            case 'player2': return `Команда 2: ${playerName}`;
+            default: return playerName;
+        }
+    }
+
+    getDefaultRoleName(role) {
+        switch(role) {
+            case 'master': return 'Ведущий';
+            case 'player1': return 'Команда 1';
+            case 'player2': return 'Команда 2';
+            default: return 'Наблюдатель';
+        }
+    }
+
+    /**
+     * Создаёт демо-видео (цветные заглушки) для остальных игроков, у которых нет видео
+     */
     createDemoVideos() {
-        const demoColors = {
-            'master': '#FF9800',
-            'player1': '#2196F3',
-            'player2': '#FF5722'
-        };
-        
-        Object.entries(demoColors).forEach(([role, color]) => {
+        // Создаём заглушки для всех контейнеров, которые не являются нашими
+        const roles = ['master', 'player1', 'player2'];
+        roles.forEach(role => {
             if (role !== this.role) {
-                const roleMap = {
-                    'master': 'video-master',
-                    'player1': 'video-team1',
-                    'player2': 'video-team2'
-                };
-                
-                const containerId = roleMap[role];
+                const containerId = this.getVideoContainerIdForRole(role);
                 if (containerId) {
-                    const container = document.getElementById(containerId);
-                    if (container) {
-                        const placeholder = container.querySelector('.video-placeholder');
-                        if (placeholder) {
-                            placeholder.style.background = `linear-gradient(135deg, ${color} 0%, ${this.darkenColor(color, 30)} 100%)`;
-                            
-                            const icon = placeholder.querySelector('i');
-                            if (icon) {
-                                icon.style.display = 'block';
-                                icon.style.color = 'white';
-                            }
-                        }
-                    }
+                    this.updatePlaceholder(containerId, role, this.players[role] || '');
                 }
             }
         });
+
+        // Если у нас самих нет видео (ошибка доступа), создаём заглушку для себя
+        if (!this.localStream) {
+            const myContainerId = this.getVideoContainerIdByRole();
+            if (myContainerId) {
+                this.updatePlaceholder(myContainerId, this.role, this.playerName);
+            }
+        }
     }
 
-    darkenColor(color, percent) {
-        const num = parseInt(color.replace("#", ""), 16);
-        const amt = Math.round(2.55 * percent);
-        const R = (num >> 16) - amt;
-        const G = (num >> 8 & 0x00FF) - amt;
-        const B = (num & 0x0000FF) - amt;
-        
-        return "#" + (
-            0x1000000 +
-            (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
-            (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
-            (B < 255 ? B < 1 ? 0 : B : 255)
-        ).toString(16).slice(1);
+    getVideoContainerIdForRole(role) {
+        const map = {
+            'master': 'video-master',
+            'player1': 'video-team1',
+            'player2': 'video-team2'
+        };
+        return map[role];
     }
 
     async loadCards() {
@@ -1692,11 +1789,12 @@ class Game {
             return;
         }
         
+        // Применяем выбранные очки и двигаем фишки
         for (let team of [1, 2]) {
             const points = this.selectedPoints[team];
             if (points !== 0) {
-                this.scores[team] += points;
-                this.movePiece(team, points, false);
+                this.scores[team] += points; // Начисляем очки здесь
+                this.movePiece(team, points, false); // false = не специальная зона
             }
         }
         
@@ -1709,7 +1807,10 @@ class Game {
             });
         }
         
+        // Скрываем панель ведущего
         this.hideMasterPanel();
+        
+        // Сбрасываем состояния
         this.resetForNextTurn();
     }
 
@@ -1740,6 +1841,8 @@ class Game {
         this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
     }
 
+    // Метод для анимации движения фишки (общий для локального и сетевого)
+    // skipEffects = true означает, что не нужно проверять специальные зоны и т.д. (используется при обновлении с сервера)
     movePiece(team, points, isSpecialZone = false, skipEffects = false) {
         if (this.teamAnimationInProgress[team]) {
             this.animationQueue[team].push({
@@ -1763,11 +1866,13 @@ class Game {
         
         this.teamAnimationInProgress[team] = true;
         
+        // ТОЛЬКО для специальных зон начисляем очки в movePiece, если не skipEffects
+        // Для обычных ходов очки начисляются в nextTurn
         if (isSpecialZone && !skipEffects) {
             if (delta > 0) {
                 this.scores[team] += delta;
             } else if (delta < 0) {
-                this.scores[team] += delta;
+                this.scores[team] += delta; // Отрицательное число отнимает очки
             }
         }
         
@@ -1780,7 +1885,7 @@ class Game {
         
         this.animatePieceMovement(team, fromPosition, newPosition, () => {
             this.teamAnimationInProgress[team] = false;
-            this.updatePieces();
+            this.updatePieces(); // точная установка после анимации
             
             if (!skipEffects) {
                 // Локальная игра: проверяем зону сразу
@@ -1812,6 +1917,7 @@ class Game {
                 }
             }
             
+            // После завершения анимации запускаем следующую из очереди
             this.processNextInQueue(team);
         });
     }
@@ -1849,6 +1955,7 @@ class Game {
         }
     }
 
+    // Анимация движения от сервера (без эффектов)
     animatePositionFromServer(team, newPosition) {
         if (this.positions[team] === newPosition) return;
         const delta = newPosition - this.positions[team];
@@ -1897,13 +2004,14 @@ class Game {
                 piece.classList.add('moving');
                 setTimeout(() => {
                     piece.classList.remove('moving');
-                    setTimeout(moveNext, 100);
+                    setTimeout(moveNext, 100); // Пауза между шагами
                 }, 300);
             } else {
                 setTimeout(moveNext, 50);
             }
         };
         
+        // Начинаем движение с небольшой задержкой
         setTimeout(moveNext, 100);
     }
 
@@ -1981,7 +2089,6 @@ class Game {
                 modal.style.animation = 'modalSlideOut 0.3s ease-out';
                 setTimeout(() => {
                     modal.remove();
-                    // В локальном режиме после закрытия зоны больше ничего не делаем
                 }, 300);
             });
 
@@ -2081,6 +2188,7 @@ class Game {
             }
         }
         
+        // Обновляем кнопки на панели ведущего
         if (this.role === 'master' || this.gameMode === 'local') {
             this.updateMasterPanelButtons();
         }
