@@ -96,48 +96,45 @@ body {
     100% { transform: scale(1); }
 }
 
-/* Верхняя панель - УМЕНЬШЕНА ПО ВЫСОТЕ */
+/* Верхняя панель - ПЕРЕДЕЛАНА НА FLEX */
 .top-panel {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    padding: 10px 15px;
+    padding: 15px 20px;
     background: #2a2a2a;
     border-radius: 12px;
-    position: relative;
-    min-height: 70px;
-    height: 70px;
+    min-height: 90px;
+    gap: 15px;
+    flex-wrap: wrap;
 }
 
-/* Информация о подключении - в столбик слева */
-.connection-info {
-    position: absolute;
-    left: 15px;
-    top: 50%;
-    transform: translateY(-50%);
+/* Информация о подключении - горизонтальная */
+.connection-info.horizontal {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 20px;
     background: rgba(0, 0, 0, 0.7);
-    padding: 8px 12px;
+    padding: 10px 15px;
     border-radius: 8px;
     border: 1px solid #444;
-    font-size: 11px;
-    z-index: 10;
-    min-width: 160px;
+    font-size: 13px;
+    flex-wrap: wrap;
+    min-width: 280px;
 }
 
-.connection-status, .room-info, .player-info {
+.connection-info.horizontal .connection-status,
+.connection-info.horizontal .room-info,
+.connection-info.horizontal .player-info {
     display: flex;
     align-items: center;
     gap: 6px;
     white-space: nowrap;
-    line-height: 1.2;
 }
 
-.connection-status i {
-    font-size: 8px;
+.connection-info.horizontal .connection-status i {
+    font-size: 10px;
 }
 
 .connection-status.connected {
@@ -148,19 +145,13 @@ body {
     color: #f44336;
 }
 
-.room-info i, .player-info i {
-    font-size: 11px;
-    color: #aaa;
-}
-
-/* Центрируем таймер и счет */
+/* Счет и кубик */
 .score-board {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
     display: flex;
-    gap: 30px;
+    gap: 20px;
     align-items: center;
+    flex: 1 1 auto;
+    justify-content: center;
 }
 
 .team-score {
@@ -168,10 +159,10 @@ body {
     padding: 8px 20px;
     background: #333;
     border-radius: 8px;
-    min-width: 120px;
+    min-width: 150px;
     border: 2px solid #444;
     transition: all 0.3s;
-    height: 50px;
+    height: 65px;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -200,6 +191,10 @@ body {
 
 .dice-container {
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
 }
 
 .dice {
@@ -207,7 +202,6 @@ body {
     height: 60px;
     background: white;
     border-radius: 12px;
-    margin: 0 auto 10px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -254,6 +248,14 @@ body {
     padding: 0 20px;
 }
 
+#task-type {
+    font-size: 13px;
+    color: #FFC107;
+    font-weight: bold;
+    margin-top: 2px;
+    min-height: 18px;
+}
+
 .answer-btn {
     margin-top: 15px;
     background: #2196F3;
@@ -273,18 +275,14 @@ body {
 }
 
 .timer-container {
-    position: absolute;
-    right: 15px;
-    top: 50%;
-    transform: translateY(-50%);
     text-align: center;
     background: linear-gradient(135deg, #d32f2f 0%, #ff5252 100%);
-    padding: 8px 15px;
+    padding: 10px 15px;
     border-radius: 8px;
     border: 3px solid #ff6b6b;
     box-shadow: 0 4px 12px rgba(211, 47, 47, 0.3);
-    min-width: 90px;
-    height: 50px;
+    min-width: 100px;
+    height: 65px;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -301,13 +299,6 @@ body {
     font-size: 12px;
     opacity: 0.8;
     margin-top: 2px;
-}
-
-#task-type {
-    font-size: 12px;
-    color: #FFC107;
-    margin-top: 5px;
-    font-weight: bold;
 }
 
 /* Основная игровая область */
@@ -646,6 +637,14 @@ body {
     padding: 8px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 8px;
+    transition: all 0.3s;
+}
+
+/* Подсветка текущей команды в панели ведущего */
+.team-control-row.current-team-row {
+    border: 2px solid #FFC107;
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.3);
+    background: rgba(255, 193, 7, 0.1);
 }
 
 .team-label {
@@ -1231,6 +1230,7 @@ body {
     text-shadow: 1px 1px 2px rgba(255,255,255,0.8) !important;
 }
 
+/* Зоны – теперь их позиции задаются через JS, поэтому здесь только цвет */
 .zone-label {
     background: none !important;
     border: none !important;
@@ -1458,50 +1458,22 @@ body {
         height: 24px;
     }
     
-    .connection-info {
-        min-width: 140px;
-        font-size: 10px;
-        padding: 6px 10px;
+    .top-panel {
+        flex-direction: column;
+        height: auto;
+    }
+    
+    .score-board {
+        width: 100%;
     }
     
     .team-score {
-        min-width: 100px;
-        padding: 6px 15px;
-        height: 45px;
+        min-width: 120px;
     }
     
-    .team-score h3 {
-        font-size: 12px;
-    }
-    
-    .score {
-        font-size: 24px;
-    }
-    
-    .dice {
-        width: 50px;
-        height: 50px;
-        font-size: 24px;
-    }
-    
-    .timer-container {
-        min-width: 80px;
-        padding: 6px 12px;
-        height: 58px;
-    }
-    
-    #timer {
-        font-size: 30px;
-    }
-    
-    .timer-label {
-        font-size: 10px;
-    }
-    
-    .btn {
-        padding: 8px 16px;
-        font-size: 13px;
-        height: 36px;
+    .connection-info.horizontal {
+        width: 100%;
+        justify-content: space-between;
     }
 }
 
@@ -1528,44 +1500,14 @@ body {
         width: 95%;
     }
     
-    .top-panel {
-        flex-direction: column;
-        gap: 15px;
-        height: auto;
-        min-height: auto;
-        padding: 15px;
-    }
-    
     .score-board {
-        position: relative;
-        left: auto;
-        transform: none;
         flex-direction: column;
         gap: 15px;
-        width: 100%;
     }
     
     .team-score {
         width: 100%;
         min-width: auto;
-    }
-    
-    .connection-info {
-        position: relative;
-        left: auto;
-        top: auto;
-        transform: none;
-        margin-bottom: 10px;
-        width: 100%;
-        min-width: auto;
-    }
-    
-    .timer-container {
-        position: relative;
-        right: auto;
-        top: auto;
-        transform: none;
-        margin-top: 10px;
     }
     
     .dice-container {
@@ -1593,11 +1535,6 @@ body {
     
     #card-question {
         font-size: 16px;
-    }
-    
-    .connection-info {
-        font-size: 10px;
-        padding: 5px 8px;
     }
 }
 
@@ -1681,11 +1618,6 @@ body {
     .piece {
         width: 22px;
         height: 22px;
-    }
-    
-    .zone-label {
-        font-size: 12px !important;
-        padding: 1px 5px !important;
     }
 }
 
