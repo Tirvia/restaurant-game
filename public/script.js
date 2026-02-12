@@ -664,15 +664,9 @@ class Game {
                 if (gameState.positions && gameState.positions[team] !== undefined) {
                     if (this.positions[team] !== gameState.positions[team]) {
                         this.animatePositionFromServer(team, gameState.positions[team]);
-                    } else {
-                        // Если позиция не изменилась, просто обновляем очки и всё
                     }
                 }
             }
-            
-            // Обновляем позиции в объекте (после анимации они обновятся в колбэке)
-            // Но мы сохраняем новые позиции отдельно, а анимация обновит this.positions по завершению
-            this.newPositionsFromServer = { ...gameState.positions };
             
             this.updateScores();
             this.updateTurnIndicator();
@@ -847,37 +841,63 @@ class Game {
      * Отображает видео в соответствующем контейнере, добавляет имя внизу и цветную рамку.
      */
     async initVideo() {
+        console.log('🎥 Запуск initVideo() для роли:', this.role);
+        
         // Сначала останавливаем предыдущий поток, если был
         if (this.localStream) {
+            console.log('🛑 Останавливаем предыдущий видеопоток');
             this.localStream.getTracks().forEach(track => track.stop());
             this.localStream = null;
         }
 
+        // Проверяем поддержку getUserMedia
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            console.error('❌ getUserMedia не поддерживается в этом браузере');
+            this.showNotification('Ваш браузер не поддерживает видеозвонки. Используется демо-режим.', 'warning');
+            this.createDemoVideos();
+            return;
+        }
+
         try {
-            const constraints = {
+            console.log('📹 Запрашиваем доступ к камере и микрофону...');
+            
+            // Создаём промис с таймаутом 10 секунд
+            const streamPromise = navigator.mediaDevices.getUserMedia({
                 video: {
                     width: { ideal: 320 },
                     height: { ideal: 240 },
                     facingMode: "user"
                 },
-                audio: true // Включаем звук
-            };
+                audio: true
+            });
 
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Таймаут запроса камеры (10 секунд)')), 10000);
+            });
+
+            const stream = await Promise.race([streamPromise, timeoutPromise]);
+            
             this.localStream = stream;
+            console.log('✅ Доступ к камере получен');
 
             // Определяем, в какой контейнер поместить видео
             const containerId = this.getVideoContainerIdByRole();
             if (!containerId) {
-                console.log('Нет контейнера для данной роли');
+                console.log('❌ Нет контейнера для данной роли');
                 return;
             }
 
             const container = document.getElementById(containerId);
-            if (!container) return;
+            if (!container) {
+                console.log('❌ Контейнер не найден:', containerId);
+                return;
+            }
 
             const placeholder = container.querySelector('.video-placeholder');
-            if (!placeholder) return;
+            if (!placeholder) {
+                console.log('❌ Placeholder не найден в контейнере');
+                return;
+            }
 
             // Очищаем placeholder
             placeholder.innerHTML = '';
@@ -904,7 +924,16 @@ class Game {
             // Устанавливаем постоянную цветную подсветку в зависимости от роли
             this.setVideoContainerColor(containerId, this.role);
 
-            console.log(`✅ Видео для ${this.role} инициализировано`);
+            // Явно запускаем воспроизведение
+            try {
+                await video.play();
+                console.log(`✅ Видео для ${this.role} воспроизводится`);
+            } catch (playError) {
+                console.error('❌ Ошибка воспроизведения видео:', playError);
+                // Возможно, autoplay заблокирован, пробуем с muted
+                video.muted = true;
+                await video.play();
+            }
 
         } catch (error) {
             console.error('❌ Ошибка доступа к камере/микрофону:', error);
