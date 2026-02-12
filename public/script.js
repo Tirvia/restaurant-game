@@ -1,4 +1,6 @@
-// Полный исправленный script.js с поддержкой видеозвонков через PeerJS (публичный сервер)
+// Полный исправленный script.js с поддержкой видеозвонков через PeerJS
+// Улучшена логика подключения: сначала локальный сервер, затем несколько публичных
+// Добавлены дополнительные ICE-серверы для надежности
 // Все игровые методы и обработчики сокета включены
 
 class Game {
@@ -95,9 +97,9 @@ class Game {
     sanitizeString(str) {
         if (!str) return 'player';
         return str
-            .replace(/[^a-zA-Z0-9_-]/g, '-')   // заменяем недопустимые символы на дефис
-            .replace(/-+/g, '-')               // убираем повторяющиеся дефисы
-            .replace(/^-|-$/g, '');            // удаляем дефис в начале и конце
+            .replace(/[^a-zA-Z0-9_-]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
     }
 
     async init() {
@@ -407,64 +409,107 @@ class Game {
         });
     }
 
-    // ========== PeerJS — всегда используем публичный сервер ==========
+    // ========== PeerJS с улучшенной логикой подключения ==========
     async initPeer() {
         return new Promise((resolve) => {
-            try {
+            const tryConnect = (servers, index = 0) => {
+                if (index >= servers.length) {
+                    console.error('❌ Все попытки подключения к PeerJS серверам исчерпаны');
+                    this.showNotification('Не удалось подключиться к серверу видеозвонков. Видео не будет работать.', 'warning');
+                    this.myPeerId = `offline-${Date.now()}`;
+                    resolve();
+                    return;
+                }
+
+                const server = servers[index];
                 const safePlayerName = this.sanitizeString(this.playerName) || 'player';
                 const peerId = `${safePlayerName}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+                
+                console.log(`🔌 Попытка ${index + 1}/${servers.length}: подключение к ${server.host}...`);
 
-                // Используем только публичный PeerJS сервер (надёжнее для Railway)
-                this.peer = new Peer(peerId, {
+                try {
+                    this.peer = new Peer(peerId, {
+                        host: server.host,
+                        port: server.port,
+                        path: server.path,
+                        secure: server.secure,
+                        config: {
+                            iceServers: [
+                                { urls: 'stun:stun.l.google.com:19302' },
+                                { urls: 'stun:stun1.l.google.com:19302' },
+                                { urls: 'stun:stun2.l.google.com:19302' },
+                                { urls: 'stun:stun3.l.google.com:19302' },
+                                { urls: 'stun:stun4.l.google.com:19302' }
+                            ]
+                        },
+                        debug: 2
+                    });
+
+                    this.peer.on('open', (id) => {
+                        console.log(`✅ PeerJS подключен к ${server.host}, ID:`, id);
+                        this.myPeerId = id;
+                        resolve();
+                    });
+
+                    this.peer.on('error', (error) => {
+                        console.error(`❌ Ошибка подключения к ${server.host}:`, error);
+                        this.peer.destroy();
+                        tryConnect(servers, index + 1);
+                    });
+
+                    this.peer.on('call', (call) => {
+                        if (this.localStream) {
+                            call.answer(this.localStream);
+                            call.on('stream', (remoteStream) => {
+                                this.displayRemoteStream(call.peer, remoteStream);
+                            });
+                            this.connections.set(call.peer, call);
+                        }
+                    });
+                } catch (err) {
+                    console.error(`❌ Исключение при подключении к ${server.host}:`, err);
+                    tryConnect(servers, index + 1);
+                }
+            };
+
+            // Список серверов для попыток: сначала свой, затем публичные
+            const servers = [
+                // 1. Локальный сервер (на том же домене)
+                {
+                    host: window.location.hostname,
+                    port: window.location.port || (window.location.protocol === 'https:' ? 443 : 80),
+                    path: '/peerjs',
+                    secure: window.location.protocol === 'https:'
+                },
+                // 2. Публичный сервер 0.peerjs.com
+                {
                     host: '0.peerjs.com',
                     port: 443,
                     path: '/',
-                    secure: true,
-                    config: {
-                        iceServers: [
-                            { urls: 'stun:stun.l.google.com:19302' },
-                            { urls: 'stun:stun1.l.google.com:19302' }
-                        ]
-                    },
-                    debug: 2 // для диагностики
-                });
+                    secure: true
+                },
+                // 3. Альтернативный публичный сервер (peerjs-io.herokuapp.com)
+                {
+                    host: 'peerjs-io.herokuapp.com',
+                    port: 443,
+                    path: '/',
+                    secure: true
+                },
+                // 4. Ещё один публичный сервер
+                {
+                    host: 'peerjs-server.herokuapp.com',
+                    port: 443,
+                    path: '/',
+                    secure: true
+                }
+            ];
 
-                this.peer.on('open', (id) => {
-                    console.log('✅ PeerJS (публичный) подключен, ID:', id);
-                    this.myPeerId = id;
-                    resolve();
-                });
-
-                this.peer.on('error', (error) => {
-                    console.error('❌ PeerJS ошибка:', error);
-                    // Не удалось подключиться к публичному серверу – продолжаем без видео
-                    this.showNotification('Не удалось подключиться к серверу видеозвонков. Видео не будет работать.', 'warning');
-                    // Генерируем "фейковый" ID, чтобы игра продолжалась
-                    this.myPeerId = `offline-${Date.now()}`;
-                    resolve(); // всё равно резолвим, чтобы не блокировать игру
-                });
-
-                this.peer.on('call', (call) => {
-                    if (this.localStream) {
-                        call.answer(this.localStream);
-                        call.on('stream', (remoteStream) => {
-                            this.displayRemoteStream(call.peer, remoteStream);
-                        });
-                        this.connections.set(call.peer, call);
-                    }
-                });
-            } catch (error) {
-                console.error('❌ Критическая ошибка PeerJS:', error);
-                this.showNotification('Ошибка инициализации видеозвонков. Игра продолжается без видео.', 'warning');
-                this.myPeerId = `error-${Date.now()}`;
-                resolve();
-            }
+            tryConnect(servers, 0);
         });
     }
 
     connectToAllPeers(participants) {
-        // Если peer не в открытом состоянии или у нас фейковый ID, не пытаемся звонить
-        if (!this.peer || this.peer.disconnected || this.myPeerId?.startsWith('offline-') || this.myPeerId?.startsWith('error-')) {
+        if (!this.peer || this.peer.disconnected || this.myPeerId?.startsWith('offline-')) {
             console.log('⚠️ PeerJS не в сети, видеозвонки недоступны');
             return;
         }
