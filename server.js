@@ -15,6 +15,14 @@ const peerServer = ExpressPeerServer(server, {
 });
 app.use('/peerjs', peerServer);
 
+// ⚠️ ВАЖНО: обрабатываем WebSocket upgrade для PeerJS
+server.on('upgrade', (req, socket, head) => {
+  // Проверяем, что запрос идёт на путь /peerjs
+  if (req.url && req.url.startsWith('/peerjs')) {
+    peerServer.handleUpgrade(req, socket, head);
+  }
+});
+
 // ========== Настройка CORS для Socket.io ==========
 const io = socketIo(server, {
   cors: {
