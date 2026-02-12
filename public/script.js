@@ -22,10 +22,9 @@ class Game {
         this.boardHeight = 600;
         this.cellRadius = 20;
         
-        this.specialZoneQueue = [];
-        this.showingSpecialZone = false;
+        // Переменные для специальных зон теперь не нужны – управляет сервер
+        // Оставляем только флаг, который синхронизируется с сервером
         this.isSpecialZoneActive = false;
-        this.animationInProgress = false;
         
         this.triggeredZonesInTurn = {
             1: new Set(),
@@ -75,10 +74,7 @@ class Game {
             player2: ''
         };
         
-        // Для специальных зон
-        this.specialZoneData = null;
-        
-        // Флаги анимации для каждой команды (чтобы не конфликтовать)
+        // Флаги анимации для каждой команды
         this.teamAnimationInProgress = { 1: false, 2: false };
         this.animationQueue = { 1: [], 2: [] };
         
@@ -418,7 +414,6 @@ class Game {
             statusDiv.style.color = '#4CAF50';
             console.log('✅ Подключено к серверу');
             
-            // Обновляем статическую панель connection-info
             this.updateConnectionInfoUI();
         });
         
@@ -473,7 +468,6 @@ class Game {
                 this.continueGameInitialization().then(resolve);
             }, 2000);
             
-            // Обновляем информацию о подключении
             this.updateConnectionInfoUI();
         });
         
@@ -502,7 +496,6 @@ class Game {
                 this.continueGameInitialization().then(resolve);
             }, 2000);
             
-            // Обновляем информацию о подключении
             this.updateConnectionInfoUI();
         });
         
@@ -591,7 +584,6 @@ class Game {
             
             this.showQuestion(data.question, data.category, data.instruction, isAnsweringPlayer);
             
-            // Запускаем таймер для локальной игры
             if (this.gameMode === 'local') {
                 this.startTimer();
             }
@@ -619,14 +611,15 @@ class Game {
             }
         });
         
+        // Новая логика специальных зон: сервер отправляет событие, клиент показывает
         this.socket.on('special-zone', (data) => {
-            console.log('🎯 Получена специальная зона:', data);
+            console.log('🎯 Получена специальная зона от сервера:', data);
             this.isSpecialZoneActive = true;
             this.showSpecialZoneModal(data);
         });
         
         this.socket.on('special-zone-result', (data) => {
-            console.log('🎯 Результат специальной зоны:', data);
+            console.log('🎯 Результат специальной зоны от сервера:', data);
             
             const modal = document.querySelector('.special-zone-modal');
             if (modal) {
@@ -641,8 +634,7 @@ class Game {
             this.scores[data.team] = data.scores[data.team];
             this.updateScores();
             
-            this.isSpecialZoneActive = false;
-            this.specialZoneData = null;
+            this.isSpecialZoneActive = false; // будет снова true, если сервер пришлёт следующую зону
             
             this.showNotification(`Команда ${data.team} получила ${data.points > 0 ? '+' : ''}${data.points} очков!`, 'info');
         });
@@ -654,7 +646,6 @@ class Game {
                 modal.style.animation = 'modalSlideOut 0.3s ease-out';
                 setTimeout(() => modal.remove(), 300);
             }
-            this.specialZoneData = null;
             this.isSpecialZoneActive = false;
         });
         
@@ -672,15 +663,9 @@ class Game {
                 if (gameState.positions && gameState.positions[team] !== undefined) {
                     if (this.positions[team] !== gameState.positions[team]) {
                         this.animatePositionFromServer(team, gameState.positions[team]);
-                    } else {
-                        // Если позиция не изменилась, просто обновляем очки и всё
                     }
                 }
             }
-            
-            // Обновляем позиции в объекте (после анимации они обновятся в колбэке)
-            // Но мы сохраняем новые позиции отдельно, а анимация обновит this.positions по завершению
-            this.newPositionsFromServer = { ...gameState.positions };
             
             this.updateScores();
             this.updateTurnIndicator();
@@ -698,8 +683,6 @@ class Game {
             this.waitingForAnswer = false;
             this.answerCompleted = false;
             this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
-            this.specialZoneQueue = [];
-            this.showingSpecialZone = false;
             this.isSpecialZoneActive = false;
             this.updateTurnIndicator();
             this.updateRollButton();
@@ -717,7 +700,6 @@ class Game {
             console.log('⏰ Время вышло!');
             this.waitingForAnswer = false;
             
-            // Автоматически закрываем карточку для отвечающего игрока
             const isAnsweringPlayer = (this.role === 'player1' && this.currentPlayer === 1) || 
                                      (this.role === 'player2' && this.currentPlayer === 2);
             
@@ -1075,11 +1057,9 @@ class Game {
         const container = document.getElementById('cells-container');
         if (!container) return;
         
-        // Удаляем старые метки, если есть
         const oldLabels = container.querySelectorAll('.zone-label');
         oldLabels.forEach(label => label.remove());
         
-        // Сдвиг вправо на 90px (увеличен offsetX в generateBoardPositions)
         const gramsLabel = document.createElement('div');
         gramsLabel.className = 'zone-label';
         gramsLabel.style.cssText = `
@@ -1098,7 +1078,7 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         gramsLabel.textContent = 'Зона граммовки ±2';
-        gramsLabel.style.left = '210px'; // было 120px, +90
+        gramsLabel.style.left = '210px'; // +90 от исходного
         gramsLabel.style.top = '450px';
         container.appendChild(gramsLabel);
         
@@ -1119,7 +1099,7 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         descLabel.textContent = 'Зона красочного описания +1/-3';
-        descLabel.style.left = '285px'; // было 195px, +90
+        descLabel.style.left = '285px'; // +90
         descLabel.style.top = '30px';
         container.appendChild(descLabel);
         
@@ -1140,7 +1120,7 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         allergyLabel.textContent = 'Зона аллергии +1/-5';
-        allergyLabel.style.left = '630px'; // было 540px, +90
+        allergyLabel.style.left = '630px'; // +90
         allergyLabel.style.top = '380px';
         container.appendChild(allergyLabel);
     }
@@ -1201,7 +1181,7 @@ class Game {
         positions[40] = { x: 790, y: 170 };
 
         const scale = 0.7;
-        const offsetX = 140; // УВЕЛИЧЕНО с 50 до 140 (сдвиг вправо на 90px)
+        const offsetX = 140; // Увеличено с 50 до 140 (сдвиг вправо)
         const offsetY = 100;
 
         for (let i = 0; i <= 40; i++) {
@@ -1308,13 +1288,7 @@ class Game {
             nextTurnBtn.addEventListener('click', () => this.nextTurn());
         }
         
-        const closePanelBtn = document.getElementById('close-panel');
-        if (closePanelBtn) {
-            closePanelBtn.addEventListener('click', () => {
-                this.hideMasterPanel();
-                this.resetSelection();
-            });
-        }
+        // Кнопка закрытия панели ведущего УДАЛЕНА
         
         window.addEventListener('resize', () => this.drawBoard());
         
@@ -1538,26 +1512,22 @@ class Game {
         console.log('⏱️ Таймер остановлен, закрываем карточку');
         clearInterval(this.timerInterval);
         
-        // Для локальной игры или онлайн-игры как отвечающий игрок
         const isAnsweringPlayer = (this.role === 'player1' && this.currentPlayer === 1) || 
                                  (this.role === 'player2' && this.currentPlayer === 2);
         
         if (this.gameMode === 'online') {
             if (isAnsweringPlayer) {
-                // Отправляем серверу, что ответ завершен по таймеру
                 this.answerCompleted = true;
                 if (this.socket && this.isConnected) {
                     this.socket.emit('answer-completed');
                 }
             }
         } else {
-            // Для локальной игры
             this.answerCompleted = true;
         }
         
         this.hideCard();
         
-        // Для локальной игры или ведущего показываем панель оценки
         if (this.gameMode === 'local' || this.role === 'master') {
             setTimeout(() => {
                 this.showMasterPanel();
@@ -1583,7 +1553,6 @@ class Game {
         const panel = document.getElementById('master-panel');
         if (panel) {
             panel.style.display = 'block';
-            // Плавное появление
             panel.style.opacity = '0';
             panel.style.transform = 'translateX(-50%) translateY(20px)';
             
@@ -1593,13 +1562,13 @@ class Game {
                 panel.style.transform = 'translateX(-50%) translateY(0)';
             });
             
-            // Обновляем видимость кнопок и подсветку
             this.updateMasterPanelButtons();
         }
         
         this.showNotification('Оцените ответ команд и нажмите "Следующий ход"', 'info');
     }
 
+    // Метод hideMasterPanel оставляем, но он больше не вызывается из кнопки закрытия
     hideMasterPanel() {
         const panel = document.getElementById('master-panel');
         if (panel) {
@@ -1675,19 +1644,16 @@ class Game {
         this.updateSelectionDisplay(team);
     }
 
-    // Обновление панели ведущего: видимость кнопок и подсветка текущей команды
     updateMasterPanelButtons() {
         const activeTeam = this.currentPlayer;
         const inactiveTeam = activeTeam === 1 ? 2 : 1;
         
-        // Скрываем кнопки +3 и -3 для неактивной команды
         document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="3"]`).forEach(btn => {
             btn.classList.add('hidden');
         });
         document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="-3"]`).forEach(btn => {
             btn.classList.add('hidden');
         });
-        // Показываем остальные кнопки для неактивной команды
         document.querySelectorAll(`.point-btn.compact[data-team="${inactiveTeam}"][data-points="1"]`).forEach(btn => {
             btn.classList.remove('hidden');
         });
@@ -1701,7 +1667,6 @@ class Game {
             btn.classList.remove('hidden');
         });
         
-        // Показываем все кнопки для активной команды
         document.querySelectorAll(`.point-btn.compact[data-team="${activeTeam}"]`).forEach(btn => {
             btn.classList.remove('hidden');
         });
@@ -1727,12 +1692,11 @@ class Game {
             return;
         }
         
-        // Применяем выбранные очки и двигаем фишки
         for (let team of [1, 2]) {
             const points = this.selectedPoints[team];
             if (points !== 0) {
-                this.scores[team] += points; // Начисляем очки здесь
-                this.movePiece(team, points, false); // false = не специальная зона
+                this.scores[team] += points;
+                this.movePiece(team, points, false);
             }
         }
         
@@ -1745,19 +1709,13 @@ class Game {
             });
         }
         
-        // Скрываем панель ведущего
         this.hideMasterPanel();
-        
-        // Сбрасываем состояния
         this.resetForNextTurn();
     }
 
     resetForNextTurn() {
         this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
-        this.specialZoneQueue = [];
-        this.showingSpecialZone = false;
         this.isSpecialZoneActive = false;
-        this.specialZoneData = null;
         
         this.diceRolledInCurrentTurn = false;
         this.waitingForAnswer = false;
@@ -1782,11 +1740,8 @@ class Game {
         this.showNotification(`Сейчас ходит команда ${this.currentPlayer}`, 'info');
     }
 
-    // Метод для анимации движения фишки (общий для локального и сетевого)
-    // skipEffects = true означает, что не нужно проверять специальные зоны и т.д. (используется при обновлении с сервера)
     movePiece(team, points, isSpecialZone = false, skipEffects = false) {
         if (this.teamAnimationInProgress[team]) {
-            // Если анимация уже идет, ставим в очередь
             this.animationQueue[team].push({
                 points,
                 isSpecialZone,
@@ -1802,20 +1757,17 @@ class Game {
         const delta = newPosition - this.positions[team];
         
         if (delta === 0) {
-            // Выполняем следующую анимацию из очереди
             this.processNextInQueue(team);
             return;
         }
         
         this.teamAnimationInProgress[team] = true;
         
-        // ТОЛЬКО для специальных зон начисляем очки в movePiece, если не skipEffects
-        // Для обычных ходов очки начисляются в nextTurn
         if (isSpecialZone && !skipEffects) {
             if (delta > 0) {
                 this.scores[team] += delta;
             } else if (delta < 0) {
-                this.scores[team] += delta; // Отрицательное число отнимает очки
+                this.scores[team] += delta;
             }
         }
         
@@ -1828,41 +1780,77 @@ class Game {
         
         this.animatePieceMovement(team, fromPosition, newPosition, () => {
             this.teamAnimationInProgress[team] = false;
-            this.updatePieces(); // точная установка после анимации
+            this.updatePieces();
             
             if (!skipEffects) {
-                if (Math.abs(points) <= 6 && !isSpecialZone) {
-                    this.checkSpecialZone(team, newPosition);
+                // Локальная игра: проверяем зону сразу
+                if (this.gameMode === 'local') {
+                    if (Math.abs(points) <= 6 && !isSpecialZone) {
+                        this.checkSpecialZoneLocal(team, newPosition);
+                    }
+                } else {
+                    // Онлайн: отправляем запрос на сервер
+                    if (Math.abs(points) <= 6 && !isSpecialZone) {
+                        if (this.socket && this.isConnected) {
+                            this.socket.emit('check-special-zone', { team, position: newPosition });
+                        }
+                    }
+                    
+                    if (this.socket && this.isConnected) {
+                        const gameState = {
+                            scores: this.scores,
+                            positions: this.positions,
+                            currentPlayer: this.currentPlayer
+                        };
+                        this.socket.emit('update-game', gameState);
+                    }
                 }
                 
                 if (newPosition >= 40) {
                     const winnerName = team === 1 ? this.players.player1 : this.players.player2;
                     this.showWinner(team, winnerName, `🎉 Победила команда ${team} (${winnerName})!`);
                 }
-                
-                if (this.gameMode === 'online' && this.socket && this.isConnected) {
-                    const gameState = {
-                        scores: this.scores,
-                        positions: this.positions,
-                        currentPlayer: this.currentPlayer
-                    };
-                    this.socket.emit('update-game', gameState);
-                    
-                    if (Math.abs(points) <= 6 && !isSpecialZone) {
-                        this.socket.emit('check-special-zone', { team, position: newPosition });
-                    }
-                }
             }
             
-            // После завершения анимации запускаем следующую из очереди
             this.processNextInQueue(team);
         });
     }
 
-    // Анимация движения от сервера (без эффектов)
+    // Локальная проверка специальной зоны (только для локального режима)
+    checkSpecialZoneLocal(team, position) {
+        const cell = document.getElementById(`cell-${position}`);
+        if (!cell) return;
+        
+        let zoneType = null;
+        
+        if (cell.classList.contains('grams')) {
+            zoneType = 'grams';
+        } else if (cell.classList.contains('description')) {
+            zoneType = 'description';
+        } else if (cell.classList.contains('allergy')) {
+            zoneType = 'allergy';
+        }
+
+        if (zoneType && !this.triggeredZonesInTurn[team].has(zoneType)) {
+            this.triggeredZonesInTurn[team].add(zoneType);
+            
+            // В локальном режиме просто показываем зону сразу (без очереди)
+            const zoneSettings = this.zoneSettings[zoneType];
+            const zoneData = {
+                team,
+                zoneType,
+                zoneName: zoneSettings.name,
+                question: zoneSettings.question,
+                positive: zoneSettings.positive,
+                negative: zoneSettings.negative
+            };
+            this.isSpecialZoneActive = true;
+            this.showSpecialZoneModal(zoneData);
+        }
+    }
+
     animatePositionFromServer(team, newPosition) {
         if (this.positions[team] === newPosition) return;
-        
         const delta = newPosition - this.positions[team];
         this.movePiece(team, delta, false, true);
     }
@@ -1909,79 +1897,14 @@ class Game {
                 piece.classList.add('moving');
                 setTimeout(() => {
                     piece.classList.remove('moving');
-                    setTimeout(moveNext, 100); // Пауза между шагами
+                    setTimeout(moveNext, 100);
                 }, 300);
             } else {
                 setTimeout(moveNext, 50);
             }
         };
         
-        // Начинаем движение с небольшой задержкой
         setTimeout(moveNext, 100);
-    }
-
-    checkSpecialZone(team, position) {
-        const cell = document.getElementById(`cell-${position}`);
-        if (!cell) return;
-        
-        let zoneType = null;
-        
-        if (cell.classList.contains('grams')) {
-            zoneType = 'grams';
-        } else if (cell.classList.contains('description')) {
-            zoneType = 'description';
-        } else if (cell.classList.contains('allergy')) {
-            zoneType = 'allergy';
-        }
-
-        if (zoneType && !this.triggeredZonesInTurn[team].has(zoneType)) {
-            this.triggeredZonesInTurn[team].add(zoneType);
-            
-            // Добавляем зону в очередь с приоритетом (активная команда первой)
-            const priority = team === this.currentPlayer ? 1 : 2;
-            
-            this.specialZoneQueue.push({
-                team: team,
-                zoneType: zoneType,
-                position: position,
-                priority: priority
-            });
-            
-            // Сортируем по приоритету (активная команда первой)
-            this.specialZoneQueue.sort((a, b) => a.priority - b.priority);
-
-            if (!this.showingSpecialZone && !this.isSpecialZoneActive) {
-                this.showNextSpecialZone();
-            }
-        }
-    }
-
-    showNextSpecialZone() {
-        if (this.specialZoneQueue.length === 0) {
-            this.showingSpecialZone = false;
-            return;
-        }
-        
-        this.showingSpecialZone = true;
-        const task = this.specialZoneQueue.shift();
-        const zoneSettings = this.zoneSettings[task.zoneType];
-        
-        this.specialZoneData = {
-            team: task.team,
-            zoneType: task.zoneType,
-            zoneName: zoneSettings.name,
-            question: zoneSettings.question,
-            positive: zoneSettings.positive,
-            negative: zoneSettings.negative
-        };
-        
-        this.isSpecialZoneActive = true;
-        
-        if (this.gameMode === 'online' && this.socket && this.isConnected) {
-            this.socket.emit('special-zone', this.specialZoneData);
-        } else {
-            this.showSpecialZoneModal(this.specialZoneData);
-        }
     }
 
     showSpecialZoneModal(data) {
@@ -2043,9 +1966,11 @@ class Game {
         if (isMaster) {
             modal.querySelector('#special-correct').addEventListener('click', () => {
                 const points = data.positive;
-                this.movePiece(data.team, points, true, false);
                 
-                if (this.gameMode === 'online' && this.socket && this.isConnected) {
+                if (this.gameMode === 'local') {
+                    this.movePiece(data.team, points, true, false);
+                    this.isSpecialZoneActive = false;
+                } else if (this.socket && this.isConnected) {
                     this.socket.emit('special-zone-result', {
                         roomCode: this.roomCode,
                         team: data.team,
@@ -2056,19 +1981,17 @@ class Game {
                 modal.style.animation = 'modalSlideOut 0.3s ease-out';
                 setTimeout(() => {
                     modal.remove();
-                    this.specialZoneData = null;
-                    this.showingSpecialZone = false;
-                    this.isSpecialZoneActive = false;
-                    
-                    setTimeout(() => this.showNextSpecialZone(), 500);
+                    // В локальном режиме после закрытия зоны больше ничего не делаем
                 }, 300);
             });
 
             modal.querySelector('#special-incorrect').addEventListener('click', () => {
                 const points = data.negative;
-                this.movePiece(data.team, points, true, false);
                 
-                if (this.gameMode === 'online' && this.socket && this.isConnected) {
+                if (this.gameMode === 'local') {
+                    this.movePiece(data.team, points, true, false);
+                    this.isSpecialZoneActive = false;
+                } else if (this.socket && this.isConnected) {
                     this.socket.emit('special-zone-result', {
                         roomCode: this.roomCode,
                         team: data.team,
@@ -2079,11 +2002,6 @@ class Game {
                 modal.style.animation = 'modalSlideOut 0.3s ease-out';
                 setTimeout(() => {
                     modal.remove();
-                    this.specialZoneData = null;
-                    this.showingSpecialZone = false;
-                    this.isSpecialZoneActive = false;
-                    
-                    setTimeout(() => this.showNextSpecialZone(), 500);
                 }, 300);
             });
         }
@@ -2163,7 +2081,6 @@ class Game {
             }
         }
         
-        // Обновляем кнопки на панели ведущего
         if (this.role === 'master' || this.gameMode === 'local') {
             this.updateMasterPanelButtons();
         }
@@ -2225,7 +2142,7 @@ class Game {
         if (panel) {
             if (isMaster || this.gameMode === 'local') {
                 panel.style.display = 'block';
-                this.hideMasterPanel(); // Скрываем по умолчанию
+                this.hideMasterPanel(); // скрываем по умолчанию
             } else {
                 panel.style.display = 'none';
             }
@@ -2255,8 +2172,6 @@ class Game {
         });
 
         this.updateRollButton();
-        
-        // Обновляем панель connection-info
         this.updateConnectionInfoUI();
     }
 
