@@ -410,103 +410,78 @@ class Game {
     }
 
     // ========== PeerJS с улучшенной логикой подключения ==========
-    async initPeer() {
-        return new Promise((resolve) => {
-            const tryConnect = (servers, index = 0) => {
-                if (index >= servers.length) {
-                    console.error('❌ Все попытки подключения к PeerJS серверам исчерпаны');
-                    this.showNotification('Не удалось подключиться к серверу видеозвонков. Видео не будет работать.', 'warning');
-                    this.myPeerId = `offline-${Date.now()}`;
+async initPeer() {
+    return new Promise((resolve) => {
+        const tryConnect = (servers, index = 0) => {
+            if (index >= servers.length) {
+                console.error('❌ Все попытки подключения к PeerJS серверам исчерпаны');
+                this.showNotification('Не удалось подключиться к серверу видеозвонков. Видео не будет работать.', 'warning');
+                this.myPeerId = `offline-${Date.now()}`;
+                resolve();
+                return;
+            }
+
+            const server = servers[index];
+            const safePlayerName = this.sanitizeString(this.playerName) || 'player';
+            const peerId = `${safePlayerName}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            
+            console.log(`🔌 Попытка ${index + 1}/${servers.length}: подключение к ${server.host}...`);
+
+            try {
+                this.peer = new Peer(peerId, {
+                    host: server.host,
+                    port: server.port,
+                    path: server.path,
+                    secure: server.secure,
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' },
+                            { urls: 'stun:stun3.l.google.com:19302' },
+                            { urls: 'stun:stun4.l.google.com:19302' }
+                        ]
+                    },
+                    debug: 2
+                });
+
+                this.peer.on('open', (id) => {
+                    console.log(`✅ PeerJS подключен к ${server.host}, ID:`, id);
+                    this.myPeerId = id;
                     resolve();
-                    return;
-                }
+                });
 
-                const server = servers[index];
-                const safePlayerName = this.sanitizeString(this.playerName) || 'player';
-                const peerId = `${safePlayerName}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-                
-                console.log(`🔌 Попытка ${index + 1}/${servers.length}: подключение к ${server.host}...`);
-
-                try {
-                    this.peer = new Peer(peerId, {
-                        host: server.host,
-                        port: server.port,
-                        path: server.path,
-                        secure: server.secure,
-                        config: {
-                            iceServers: [
-                                { urls: 'stun:stun.l.google.com:19302' },
-                                { urls: 'stun:stun1.l.google.com:19302' },
-                                { urls: 'stun:stun2.l.google.com:19302' },
-                                { urls: 'stun:stun3.l.google.com:19302' },
-                                { urls: 'stun:stun4.l.google.com:19302' }
-                            ]
-                        },
-                        debug: 2
-                    });
-
-                    this.peer.on('open', (id) => {
-                        console.log(`✅ PeerJS подключен к ${server.host}, ID:`, id);
-                        this.myPeerId = id;
-                        resolve();
-                    });
-
-                    this.peer.on('error', (error) => {
-                        console.error(`❌ Ошибка подключения к ${server.host}:`, error);
-                        this.peer.destroy();
-                        tryConnect(servers, index + 1);
-                    });
-
-                    this.peer.on('call', (call) => {
-                        if (this.localStream) {
-                            call.answer(this.localStream);
-                            call.on('stream', (remoteStream) => {
-                                this.displayRemoteStream(call.peer, remoteStream);
-                            });
-                            this.connections.set(call.peer, call);
-                        }
-                    });
-                } catch (err) {
-                    console.error(`❌ Исключение при подключении к ${server.host}:`, err);
+                this.peer.on('error', (error) => {
+                    console.error(`❌ Ошибка подключения к ${server.host}:`, error);
+                    this.peer.destroy();
                     tryConnect(servers, index + 1);
-                }
-            };
+                });
 
-            // Список серверов для попыток: сначала свой, затем публичные
-            const servers = [
-                // 1. Локальный сервер (на том же домене)
-                {
-                    host: window.location.hostname,
-                    port: window.location.port || (window.location.protocol === 'https:' ? 443 : 80),
-                    path: '/peerjs',
-                    secure: window.location.protocol === 'https:'
-                },
-                // 2. Публичный сервер 0.peerjs.com
-                {
-                    host: '0.peerjs.com',
-                    port: 443,
-                    path: '/',
-                    secure: true
-                },
-                // 3. Альтернативный публичный сервер (peerjs-io.herokuapp.com)
-                {
-                    host: 'peerjs-io.herokuapp.com',
-                    port: 443,
-                    path: '/',
-                    secure: true
-                },
-                // 4. Ещё один публичный сервер
-                {
-                    host: 'peerjs-server.herokuapp.com',
-                    port: 443,
-                    path: '/',
-                    secure: true
-                }
-            ];
+                this.peer.on('call', (call) => {
+                    if (this.localStream) {
+                        call.answer(this.localStream);
+                        call.on('stream', (remoteStream) => {
+                            this.displayRemoteStream(call.peer, remoteStream);
+                        });
+                        this.connections.set(call.peer, call);
+                    }
+                });
+            } catch (err) {
+                console.error(`❌ Исключение при подключении к ${server.host}:`, err);
+                tryConnect(servers, index + 1);
+            }
+        };
 
-            tryConnect(servers, 0);
-        });
-    }
+        // Только публичные серверы, свой сервер НЕ ПРОБУЕМ
+        const servers = [
+            { host: '0.peerjs.com', port: 443, path: '/', secure: true },
+            { host: 'peerjs-io.herokuapp.com', port: 443, path: '/', secure: true },
+            { host: 'peerjs-server.herokuapp.com', port: 443, path: '/', secure: true }
+        ];
+
+        tryConnect(servers, 0);
+    });
+}
 
     connectToAllPeers(participants) {
         if (!this.peer || this.peer.disconnected || this.myPeerId?.startsWith('offline-')) {
