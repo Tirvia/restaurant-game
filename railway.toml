@@ -8,5 +8,4 @@ startCommand = "node server.js"
 [[services.ports]]
 port = 3000
 protocol = "tcp"
-# 👇 ВАЖНО: разрешить WebSocket
 handlers = ["http", "websocket"]
