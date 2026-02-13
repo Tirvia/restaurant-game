@@ -2,13 +2,42 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Игра - GARAGE</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GARAGE - ресторанная игра</title>
+    
+    <!-- Font Awesome 6 (иконки) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Socket.IO client -->
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    
+    <!-- Основные стили игры -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Дополнительные стили для анимаций и адаптивности -->
     <style>
-        /* Дополнительные стили для анимаций */
+        /* Глобальные исправления */
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background: #1a1a1a;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            overflow-x: hidden;
+        }
+        
+        .game-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            transition: opacity 0.5s;
+        }
+        
+        /* Анимации для салюта */
         @keyframes firework {
             0% { transform: translateY(0) scale(1); opacity: 1; }
             50% { transform: translateY(-100px) scale(1.5); opacity: 0.8; }
@@ -24,19 +53,17 @@
             from { transform: translateX(-50%) translateY(0); opacity: 1; }
             to { transform: translateX(-50%) translateY(-20px); opacity: 0; }
         }
-
-        .deck-image {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            border-radius: 10px;
-            transition: transform 0.3s ease;
+        
+        @keyframes modalSlideIn {
+            from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
         }
-
-        .deck:hover .deck-image {
-            transform: scale(1.05);
+        
+        @keyframes modalSlideOut {
+            from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            to { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
         }
-
+        
         .sr-only {
             position: absolute;
             width: 1px;
@@ -48,11 +75,16 @@
             white-space: nowrap;
             border: 0;
         }
+        
+        /* Скрытые элементы */
+        .hidden {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
     <div class="game-container">
-        <!-- ВИДЕО КОНТЕЙНЕР В ВЕРХУ (исправлены ID) -->
+        <!-- ========== ВИДЕО КОНТЕЙНЕРЫ (3 шт) ========== -->
         <div class="video-container">
             <div class="video-box" id="video-master-container">
                 <div class="video-placeholder">
@@ -76,8 +108,9 @@
             </div>
         </div>
 
-        <!-- Верхняя панель с информацией -->
+        <!-- ========== ВЕРХНЯЯ ПАНЕЛЬ ========== -->
         <div class="top-panel">
+            <!-- Информация о подключении -->
             <div class="connection-info horizontal">
                 <div class="connection-status connected">
                     <i class="fas fa-circle"></i>
@@ -93,6 +126,7 @@
                 </div>
             </div>
             
+            <!-- Счет и кубик -->
             <div class="score-board">
                 <div class="team-score" id="team1-score">
                     <h3 id="team1-name">Команда 1</h3>
@@ -100,7 +134,9 @@
                 </div>
                 <div class="dice-container">
                     <div class="dice" id="dice">?</div>
-                    <button id="roll-dice" class="btn">Бросить кубик</button>
+                    <button id="roll-dice" class="btn">
+                        <i class="fas fa-dice"></i> Бросить кубик
+                    </button>
                     <div id="task-type"></div>
                 </div>
                 <div class="team-score" id="team2-score">
@@ -109,14 +145,16 @@
                 </div>
             </div>
             
+            <!-- Таймер -->
             <div class="timer-container">
                 <div id="timer">60</div>
                 <div class="timer-label">секунд</div>
             </div>
         </div>
 
-        <!-- Основное игровое поле -->
+        <!-- ========== ИГРОВОЕ ПОЛЕ ========== -->
         <div class="main-game-area">
+            <!-- Левая колода карт (категории 1-3) -->
             <div class="decks-left">
                 <div class="deck" id="kitchen-deck" data-type="1" aria-label="Кухня">
                     <img src="cards/1.png" alt="Кухня" class="deck-image">
@@ -132,6 +170,7 @@
                 </div>
             </div>
 
+            <!-- Игровая доска с canvas и фишками -->
             <div class="game-board">
                 <canvas id="board-canvas"></canvas>
                 <div class="pieces">
@@ -141,6 +180,7 @@
                 <div id="cells-container"></div>
             </div>
 
+            <!-- Правая колода карт (категории 4-6) -->
             <div class="decks-right">
                 <div class="deck" id="situation-deck" data-type="4" aria-label="Ситуация">
                     <img src="cards/4.png" alt="Ситуация" class="deck-image">
@@ -157,7 +197,7 @@
             </div>
         </div>
 
-        <!-- Центральная карточка с вопросом -->
+        <!-- ========== КАРТОЧКА С ВОПРОСОМ (модальное окно) ========== -->
         <div class="card-modal" id="card-modal">
             <div class="card-content">
                 <div class="card-front">
@@ -170,20 +210,21 @@
                     <button id="answer-received" class="btn answer-btn" style="display: none;">
                         <i class="fas fa-check-circle"></i> Завершить ответ
                     </button>
-                    <button id="master-evaluation" class="btn evaluation-btn" style="display: none; background: #FF9800;">
+                    <button id="master-evaluation" class="btn evaluation-btn" style="display: none;">
                         <i class="fas fa-clipboard-check"></i> Приступить к оцениванию
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- Панель ведущего (без кнопки закрытия) -->
+        <!-- ========== ПАНЕЛЬ ВЕДУЩЕГО ========== -->
         <div class="master-panel" id="master-panel">
             <div class="master-panel-header">
                 <h3><i class="fas fa-crown"></i> Панель ведущего</h3>
             </div>
             
             <div class="compact-controls">
+                <!-- Команда 1 -->
                 <div class="team-control-row" id="team-control-row-1">
                     <div class="team-label" style="color: #2196F3;">
                         <i class="fas fa-user-circle"></i>
@@ -206,6 +247,7 @@
                     </div>
                 </div>
                 
+                <!-- Команда 2 -->
                 <div class="team-control-row" id="team-control-row-2">
                     <div class="team-label" style="color: #FF5722;">
                         <i class="fas fa-user-circle"></i>
@@ -236,9 +278,11 @@
             </div>
         </div>
 
+        <!-- ========== КОНТЕЙНЕР ДЛЯ ФЕЙЕРВЕРКОВ ========== -->
         <div id="fireworks"></div>
     </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+
+    <!-- Основной скрипт игры (полный, с WebRTC через Socket.IO) -->
     <script src="script.js"></script>
 </body>
 </html>
