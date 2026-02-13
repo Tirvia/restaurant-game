@@ -1,11 +1,9 @@
-// Полный исправленный script.js с WebRTC через Socket.IO
-// Исправлены проблемы:
-// - Участники больше не теряют видео при подключении наблюдателя
-// - Добавлена функция "картинка-в-картинке" для отвечающего игрока
-// - Улучшена стабильность WebRTC соединений
+// Полный исправленный script.js
+// Версия 3.0 – стабильные видеозвонки, PiP, восстановление соединения, обработка наблюдателей
 
 class Game {
     constructor() {
+        // ========== Игровые переменные ==========
         this.currentPlayer = 1;
         this.scores = { 1: 0, 2: 0 };
         this.positions = { 1: 0, 2: 0 };
@@ -29,55 +27,44 @@ class Game {
         
         // Переменные для специальных зон
         this.isSpecialZoneActive = false;
-        
-        this.triggeredZonesInTurn = {
-            1: new Set(),
-            2: new Set()
-        };
+        this.triggeredZonesInTurn = { 1: new Set(), 2: new Set() };
         
         this.zoneSettings = {
-            'grams': { 
-                name: 'Зона граммовки', 
-                positive: 2, 
+            'grams': {
+                name: 'Зона граммовки',
+                positive: 2,
                 negative: -2,
                 question: "Назовите точный вес ингредиента для этого блюда в граммах."
             },
-            'description': { 
-                name: 'Зона красочного описания', 
-                positive: 1, 
+            'description': {
+                name: 'Зона красочного описания',
+                positive: 1,
                 negative: -3,
                 question: "Дайте красочное описание этого блюда или напитка, чтобы вызвать аппетит у гостя."
             },
-            'allergy': { 
-                name: 'Зона аллергии', 
-                positive: 1, 
+            'allergy': {
+                name: 'Зона аллергии',
+                positive: 1,
                 negative: -5,
                 question: "Можно ли убрать этот ингредиент из блюда без ущерба для вкуса? Почему?"
             }
         };
         
-        // Свойства для онлайн-игры
+        // ========== Онлайн-переменные ==========
         this.role = null;
         this.roomCode = null;
         this.playerName = '';
         this.socket = null;
         this.isConnected = false;
         this.serverUrl = window.location.origin;
+        this.gameMode = null;
         
-        // WebRTC переменные
+        // ========== WebRTC ==========
         this.localStream = null;
         this.peerConnections = new Map(); // socketId -> RTCPeerConnection
         this.remoteStreams = new Map();    // socketId -> MediaStream
-        this.reconnectTimer = null;        // таймер для переподключения
         
-        // Для синхронизации
-        this.currentQuestion = null;
-        this.currentQuestionCategory = null;
-        
-        // Режим игры
-        this.gameMode = null;
-        
-        // Хранение имен игроков и их socketId
+        // ========== Участники комнаты ==========
         this.players = {
             master: '',
             player1: '',
@@ -85,20 +72,62 @@ class Game {
             masterSocketId: null,
             player1SocketId: null,
             player2SocketId: null,
-            spectators: [] // массив объектов { name, socketId }
+            spectators: [] // массив { name, socketId }
         };
         
-        // Флаги анимации для каждой команды
+        // ========== Анимация ==========
         this.teamAnimationInProgress = { 1: false, 2: false };
         this.animationQueue = { 1: [], 2: [] };
         
-        // Состояние PiP
+        // ========== Картинка-в-картинке ==========
         this.pipActive = false;
         this.pipPlayerSocketId = null;
+        
+        // ========== Флаги переподключения ==========
+        this.rejoinAfterReconnect = false;
+        
+        // Добавляем CSS для PiP
+        this.addPipStyles();
         
         this.init();
     }
 
+    // ========== Добавление CSS для картинки-в-картинке ==========
+    addPipStyles() {
+        const styleId = 'game-pip-styles';
+        if (document.getElementById(styleId)) return;
+        const style = document.createElement('style');
+        style.id = styleId;
+        style.textContent = `
+            .video-box.pip-active {
+                position: fixed !important;
+                top: 20px !important;
+                right: 20px !important;
+                left: auto !important;
+                bottom: auto !important;
+                width: 320px !important;
+                height: 240px !important;
+                z-index: 9999 !important;
+                border: 4px solid #FFC107 !important;
+                box-shadow: 0 0 30px rgba(255, 193, 7, 0.8) !important;
+                animation: pipAppear 0.3s ease-out;
+            }
+            @keyframes pipAppear {
+                from { transform: scale(0.8); opacity: 0; }
+                to { transform: scale(1); opacity: 1; }
+            }
+            .video-box.pip-active .video-placeholder {
+                width: 100%;
+                height: 100%;
+            }
+            .video-box.pip-active video {
+                object-fit: cover !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // ========== Инициализация ==========
     async init() {
         console.log('🚀 Инициализация игры...');
         this.gameContainer = document.querySelector('.game-container');
@@ -114,6 +143,7 @@ class Game {
         }
     }
 
+    // ========== Меню выбора режима ==========
     async showGameModeSelection() {
         return new Promise((resolve) => {
             const modal = document.createElement('div');
@@ -178,6 +208,7 @@ class Game {
         });
     }
 
+    // ========== Локальная игра ==========
     startLocalGame() {
         console.log('🖥️ Запуск локальной игры...');
         document.querySelector('.video-container').style.display = 'none';
@@ -192,6 +223,7 @@ class Game {
         this.updateRollButton();
     }
 
+    // ========== Выбор роли (онлайн) ==========
     async showRoleSelection() {
         return new Promise((resolve) => {
             const modal = document.createElement('div');
@@ -402,28 +434,23 @@ class Game {
         });
     }
 
-    // ========== WebRTC методы ==========
-
+    // ========== Инициализация видео и WebRTC ==========
     async initVideo() {
-        console.log('🎥 Запуск initVideo() для роли:', this.role);
+        console.log('🎥 initVideo() для роли:', this.role);
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => track.stop());
             this.localStream = null;
         }
-        
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             console.error('❌ getUserMedia не поддерживается');
             this.showNotification('Ваш браузер не поддерживает видеозвонки.', 'warning');
             return;
         }
-        
         try {
-            console.log('📹 Запрашиваем доступ к камере и микрофону...');
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: { ideal: 320 }, height: { ideal: 240 }, facingMode: "user" },
                 audio: true
             });
-            
             this.localStream = stream;
             console.log('✅ Доступ к камере получен');
             
@@ -432,7 +459,7 @@ class Game {
                 this.displayLocalStream(containerId);
             }
             
-            // После получения потока инициируем WebRTC соединения
+            // Оповещаем сервер о готовности и инициируем соединения
             if (this.socket && this.roomCode) {
                 this.socket.emit('webrtc-ready', { roomCode: this.roomCode });
                 this.initiateWebRTCConnections();
@@ -446,7 +473,6 @@ class Game {
     displayLocalStream(containerId) {
         const container = document.getElementById(containerId);
         if (!container) return;
-        
         const placeholder = container.querySelector('.video-placeholder');
         if (!placeholder) return;
         
@@ -471,41 +497,42 @@ class Game {
         this.setVideoContainerColor(containerId, this.role);
     }
 
+    // ========== WebRTC ==========
     async createPeerConnection(targetSocketId, isInitiator = false) {
-        // Проверяем, не пытаемся ли подключиться к самому себе
-        if (targetSocketId === this.socket.id) {
-            console.warn('⚠️ Попытка подключения к самому себе, пропускаем');
+        // Не подключаемся к себе
+        if (targetSocketId === this.socket?.id) {
+            console.warn('⚠️ Пропускаем подключение к самому себе');
             return null;
         }
-        
         if (this.peerConnections.has(targetSocketId)) {
             console.log('⚠️ Соединение уже существует с', targetSocketId);
             return this.peerConnections.get(targetSocketId);
         }
-        
+        if (!this.localStream) {
+            console.log('⚠️ Нет локального потока, соединение не создано');
+            return null;
+        }
+
         const config = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
                 { urls: 'stun:stun2.l.google.com:19302' },
-                { urls: 'stun:stun3.l.google.com:19302' },
-                { urls: 'stun:stun4.l.google.com:19302' }
+                { urls: 'stun:stun3.l.google.com:19302' }
             ],
             iceCandidatePoolSize: 10,
             bundlePolicy: 'max-bundle',
             rtcpMuxPolicy: 'require'
         };
-        
+
         const pc = new RTCPeerConnection(config);
         this.peerConnections.set(targetSocketId, pc);
-        
-        // Добавляем локальные треки с использованием transceiver для большей надежности
-        if (this.localStream) {
-            this.localStream.getTracks().forEach(track => {
-                pc.addTransceiver(track, { streams: [this.localStream], direction: 'sendrecv' });
-            });
-        }
-        
+
+        // Добавляем локальные треки
+        this.localStream.getTracks().forEach(track => {
+            pc.addTransceiver(track, { streams: [this.localStream], direction: 'sendrecv' });
+        });
+
         // Обработка ICE кандидатов
         pc.onicecandidate = (event) => {
             if (event.candidate) {
@@ -516,7 +543,7 @@ class Game {
                 });
             }
         };
-        
+
         // Получение удалённого потока
         pc.ontrack = (event) => {
             console.log('📹 Получен удалённый поток от', targetSocketId);
@@ -526,27 +553,16 @@ class Game {
                 this.displayRemoteStream(targetSocketId, remoteStream);
             }
         };
-        
+
         // Отслеживание состояния соединения
         pc.onconnectionstatechange = () => {
             console.log(`🔌 Состояние соединения с ${targetSocketId}: ${pc.connectionState}`);
-            if (pc.connectionState === 'disconnected' || 
-                pc.connectionState === 'failed' || 
-                pc.connectionState === 'closed') {
+            if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
                 this.closePeerConnection(targetSocketId);
-                
-                // Пытаемся переподключиться через 2 секунды
-                if (this.localStream && this.socket && this.roomCode) {
-                    clearTimeout(this.reconnectTimer);
-                    this.reconnectTimer = setTimeout(() => {
-                        console.log('🔄 Попытка переподключения к', targetSocketId);
-                        this.initiateWebRTCConnections();
-                    }, 2000);
-                }
             }
         };
-        
-        // Если мы инициатор, создаём offer
+
+        // Если инициатор, создаём offer
         if (isInitiator) {
             try {
                 const offer = await pc.createOffer({
@@ -564,7 +580,7 @@ class Game {
                 this.closePeerConnection(targetSocketId);
             }
         }
-        
+
         return pc;
     }
 
@@ -575,8 +591,6 @@ class Game {
             this.peerConnections.delete(socketId);
         }
         this.remoteStreams.delete(socketId);
-        
-        // Очищаем видео-контейнер
         this.clearVideoContainer(socketId);
     }
 
@@ -589,22 +603,14 @@ class Game {
         } else if (socketId === this.players.player2SocketId) {
             containerId = 'video-team2-container';
         } else {
-            // Проверяем, не спектатор ли это
-            const spectator = this.players.spectators.find(s => s.socketId === socketId);
-            if (spectator) {
-                // У спектаторов нет выделенных контейнеров, ничего не делаем
-                return;
-            }
+            return;
         }
-        
-        if (!containerId) return;
-        
+
         const container = document.getElementById(containerId);
         if (!container) return;
-        
         const placeholder = container.querySelector('.video-placeholder');
         if (!placeholder) return;
-        
+
         // Если это не наш контейнер (не наше локальное видео), восстанавливаем плейсхолдер
         if (this.getVideoContainerIdByRole() !== containerId) {
             const role = containerId === 'video-master-container' ? 'master' :
@@ -618,7 +624,7 @@ class Game {
     displayRemoteStream(socketId, stream) {
         let containerId = null;
         let role = null;
-        
+
         if (socketId === this.players.masterSocketId) {
             containerId = 'video-master-container';
             role = 'master';
@@ -632,13 +638,12 @@ class Game {
             console.log('👀 Получен поток от наблюдателя, не отображаем');
             return;
         }
-        
+
         const container = document.getElementById(containerId);
         if (!container) return;
-        
         const placeholder = container.querySelector('.video-placeholder');
         if (!placeholder) return;
-        
+
         placeholder.innerHTML = '';
         
         const video = document.createElement('video');
@@ -657,98 +662,67 @@ class Game {
         placeholder.appendChild(label);
         
         this.setVideoContainerColor(containerId, role);
-        
-        // Если это текущий отвечающий игрок и PiP активен, применяем PiP стиль
+
+        // Если это PiP – применяем стиль
         if (this.pipActive && socketId === this.pipPlayerSocketId) {
             this.applyPipStyle(containerId, true);
         }
     }
 
     initiateWebRTCConnections() {
-        if (!this.socket || !this.roomCode || !this.localStream) {
-            console.log('⚠️ Невозможно инициировать WebRTC: нет сокета, комнаты или локального потока');
+        if (!this.localStream || !this.socket || !this.roomCode) {
+            console.log('⚠️ Невозможно инициировать WebRTC: нет локального потока, сокета или комнаты');
             return;
         }
-        
         console.log('🔄 Инициируем WebRTC соединения...');
-        
-        // Получаем список всех участников, кроме себя
-        const participants = [];
-        if (this.players.masterSocketId && this.players.masterSocketId !== this.socket.id) {
-            participants.push({ socketId: this.players.masterSocketId, name: this.players.master });
-        }
-        if (this.players.player1SocketId && this.players.player1SocketId !== this.socket.id) {
-            participants.push({ socketId: this.players.player1SocketId, name: this.players.player1 });
-        }
-        if (this.players.player2SocketId && this.players.player2SocketId !== this.socket.id) {
-            participants.push({ socketId: this.players.player2SocketId, name: this.players.player2 });
-        }
-        
-        // Также инициируем соединения с наблюдателями (если нужно, но видео наблюдателей не отображаем)
-        // Это может быть полезно для двусторонней аудиосвязи, если наблюдатели тоже могут говорить
-        this.players.spectators.forEach(spectator => {
-            if (spectator.socketId && spectator.socketId !== this.socket.id) {
-                participants.push({ socketId: spectator.socketId, name: spectator.name });
-            }
-        });
-        
-        participants.forEach(participant => {
-            if (!this.peerConnections.has(participant.socketId)) {
-                console.log(`🔗 Инициируем WebRTC соединение с ${participant.name} (${participant.socketId})`);
-                this.createPeerConnection(participant.socketId, true);
+
+        const targets = [
+            { id: this.players.masterSocketId, name: this.players.master },
+            { id: this.players.player1SocketId, name: this.players.player1 },
+            { id: this.players.player2SocketId, name: this.players.player2 }
+        ];
+
+        targets.forEach(target => {
+            if (target.id && target.id !== this.socket.id && !this.peerConnections.has(target.id)) {
+                console.log(`🔗 Инициируем WebRTC соединение с ${target.name} (${target.id})`);
+                this.createPeerConnection(target.id, true);
             }
         });
     }
 
-    // ========== Методы для картинки-в-картинке (PiP) ==========
-    
-    setPipForPlayer(isActive, playerSocketId = null) {
-        this.pipActive = isActive;
+    // ========== Картинка-в-картинке ==========
+    setPipForPlayer(active, playerSocketId = null) {
+        this.pipActive = active;
         this.pipPlayerSocketId = playerSocketId;
-        
-        // Убираем PiP со всех контейнеров
-        const containers = ['video-master-container', 'video-team1-container', 'video-team2-container'];
-        containers.forEach(containerId => {
-            this.applyPipStyle(containerId, false);
+
+        // Сбрасываем PiP со всех контейнеров
+        ['video-master-container', 'video-team1-container', 'video-team2-container'].forEach(id => {
+            this.applyPipStyle(id, false);
         });
-        
-        // Если нужно активировать PiP для конкретного игрока
-        if (isActive && playerSocketId) {
-            let targetContainerId = null;
+
+        if (active && playerSocketId) {
+            let targetId = null;
             if (playerSocketId === this.players.player1SocketId) {
-                targetContainerId = 'video-team1-container';
+                targetId = 'video-team1-container';
             } else if (playerSocketId === this.players.player2SocketId) {
-                targetContainerId = 'video-team2-container';
+                targetId = 'video-team2-container';
             } else if (playerSocketId === this.players.masterSocketId) {
-                targetContainerId = 'video-master-container';
+                targetId = 'video-master-container';
             }
-            
-            if (targetContainerId) {
-                this.applyPipStyle(targetContainerId, true);
+            if (targetId) {
+                this.applyPipStyle(targetId, true);
             }
         }
     }
-    
+
     applyPipStyle(containerId, enable) {
         const container = document.getElementById(containerId);
-        if (!container) return;
-        
-        if (enable) {
-            container.classList.add('pip-active');
-            // Убеждаемся, что другие контейнеры не имеют pip-active
-            const otherContainers = ['video-master-container', 'video-team1-container', 'video-team2-container']
-                .filter(id => id !== containerId);
-            otherContainers.forEach(id => {
-                const el = document.getElementById(id);
-                if (el) el.classList.remove('pip-active');
-            });
-        } else {
-            container.classList.remove('pip-active');
+        if (container) {
+            container.classList.toggle('pip-active', enable);
         }
     }
 
     // ========== Методы интерфейса ==========
-
     getVideoContainerIdByRole() {
         const roleMap = {
             'master': 'video-master-container',
@@ -810,12 +784,12 @@ class Game {
         if (!container) return;
         const placeholder = container.querySelector('.video-placeholder');
         if (!placeholder) return;
-        
+
         // Если это наш контейнер и у нас есть локальный поток, не перезаписываем
         if (this.getVideoContainerIdByRole() === containerId && this.localStream) {
             return;
         }
-        
+
         placeholder.innerHTML = '';
         const icon = document.createElement('i');
         icon.className = this.getRoleIcon(role);
@@ -845,8 +819,7 @@ class Game {
         }
     }
 
-    // ========== Игровая логика ==========
-
+    // ========== Игровая логика (без изменений, но с вызовом PiP) ==========
     async continueGameInitialization() {
         console.log('🎥 Инициализируем видео...');
         if (this.gameMode === 'online') {
@@ -1223,19 +1196,12 @@ class Game {
         document.getElementById('card-instruction').textContent = instruction || '';
         const answerBtn = document.getElementById('answer-received');
         const masterBtn = document.getElementById('master-evaluation');
-        
+
         // Активируем PiP для отвечающего игрока
         if (isAnsweringPlayer && this.role !== 'master') {
-            // Определяем socketId отвечающего игрока
-            let answeringSocketId = null;
-            if (this.role === 'player1') {
-                answeringSocketId = this.socket.id; // мы сами отвечаем
-            } else if (this.role === 'player2') {
-                answeringSocketId = this.socket.id;
-            }
-            this.setPipForPlayer(true, answeringSocketId);
+            this.setPipForPlayer(true, this.socket.id);
         }
-        
+
         if (this.gameMode === 'online') {
             if (isAnsweringPlayer) {
                 answerBtn.style.display = 'block';
@@ -1325,6 +1291,7 @@ class Game {
             this.answerCompleted = true;
         }
         this.hideCard();
+        this.setPipForPlayer(false); // выключаем PiP
         if (this.gameMode === 'local' || this.role === 'master') {
             setTimeout(() => this.showMasterPanel(), 500);
         }
@@ -1817,10 +1784,10 @@ class Game {
     }
 
     updatePlayers(players) {
-        this.players.master = players.master || '';
-        this.players.player1 = players.player1 || '';
-        this.players.player2 = players.player2 || '';
-        this.players.spectators = players.spectators || [];
+        this.players.master = players.master?.name || '';
+        this.players.player1 = players.player1?.name || '';
+        this.players.player2 = players.player2?.name || '';
+        // socketId обновляются отдельно через participants-update
         this.updateVideoPlaceholders();
         this.updateMasterPanelNames();
         this.updateConnectionInfoUI();
@@ -1967,8 +1934,7 @@ class Game {
         }, 3000);
     }
 
-    // ========== Socket обработчики ==========
-
+    // ========== Socket.IO обработчики ==========
     setupSocketConnection(modal, resolve) {
         console.log('🔌 Подключаемся к серверу:', this.serverUrl);
         
@@ -2022,6 +1988,7 @@ class Game {
             }
         });
         
+        // ---------- События комнат ----------
         this.socket.on('role-unavailable', (data) => {
             statusText.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${data.message}`;
             alert(data.message);
@@ -2075,10 +2042,16 @@ class Game {
             this.role = data.role;
             this.gameMode = data.gameMode;
             
-            // Сохраняем свой socket.id
-            if (this.role === 'master') this.players.masterSocketId = this.socket.id;
-            else if (this.role === 'player1') this.players.player1SocketId = this.socket.id;
-            else if (this.role === 'player2') this.players.player2SocketId = this.socket.id;
+            // Сохраняем свой socket.id (он уже есть в this.socket.id)
+            // Получаем socketId других участников из data.players
+            if (data.players) {
+                this.players.master = data.players.master?.name || '';
+                this.players.masterSocketId = data.players.master?.socketId || null;
+                this.players.player1 = data.players.player1?.name || '';
+                this.players.player1SocketId = data.players.player1?.socketId || null;
+                this.players.player2 = data.players.player2?.name || '';
+                this.players.player2SocketId = data.players.player2?.socketId || null;
+            }
             
             if (data.gameState) {
                 this.currentPlayer = data.gameState.currentPlayer;
@@ -2088,9 +2061,7 @@ class Game {
                 this.isSpecialZoneActive = data.gameState.isSpecialZoneActive || false;
             }
             
-            if (data.players) {
-                this.updatePlayers(data.players);
-            }
+            this.updatePlayers(data.players); // обновит имена в UI
             
             statusText.innerHTML = '<i class="fas fa-check-circle"></i> Вы в игре!';
             
@@ -2101,80 +2072,64 @@ class Game {
             
             this.updateConnectionInfoUI();
             
-            // После успешного входа, если у нас есть локальный поток, отправляем webrtc-ready и инициируем соединения
+            // Если есть локальный поток – начинаем WebRTC
             if (this.localStream) {
                 this.socket.emit('webrtc-ready', { roomCode: this.roomCode });
                 this.initiateWebRTCConnections();
             }
         });
 
+        // ---------- Обновление участников (основной источник информации о socketId) ----------
         this.socket.on('participants-update', (participants) => {
-            console.log('👥 Обновление участников:', participants);
-            
-            // Закрываем соединения с участниками, которых больше нет
-            const currentSocketIds = new Set();
-            if (participants.master?.socketId) currentSocketIds.add(participants.master.socketId);
-            if (participants.player1?.socketId) currentSocketIds.add(participants.player1.socketId);
-            if (participants.player2?.socketId) currentSocketIds.add(participants.player2.socketId);
-            // Добавляем спектаторов, чтобы не закрывать соединения с ними, если они все еще в комнате
-            participants.spectators?.forEach(s => {
-                if (s.socketId) currentSocketIds.add(s.socketId);
-            });
-            
-            for (const [socketId, pc] of this.peerConnections) {
-                if (!currentSocketIds.has(socketId)) {
-                    console.log('🔌 Участник отключился, закрываем соединение:', socketId);
-                    this.closePeerConnection(socketId);
+            console.log('👥 participants-update:', participants);
+
+            // Обновляем данные с проверкой изменений socketId
+            const updatePlayer = (role, data) => {
+                const oldSocketId = this.players[`${role}SocketId`];
+                const newSocketId = data?.socketId || null;
+                const newName = data?.name || '';
+
+                this.players[role] = newName;
+                this.players[`${role}SocketId`] = newSocketId;
+
+                // Если socketId изменился и существует новое значение – закрываем старое соединение и создаём новое
+                if (oldSocketId && newSocketId && oldSocketId !== newSocketId) {
+                    console.log(`🔄 SocketId ${role} изменился: ${oldSocketId} -> ${newSocketId}, обновляем соединение`);
+                    this.closePeerConnection(oldSocketId);
+                    if (this.localStream && newSocketId !== this.socket.id) {
+                        this.createPeerConnection(newSocketId, true);
+                    }
                 }
-            }
-            
-            // Обновляем данные игроков
-            if (participants.master) {
-                this.players.master = participants.master.name;
-                this.players.masterSocketId = participants.master.socketId;
-            }
-            if (participants.player1) {
-                this.players.player1 = participants.player1.name;
-                this.players.player1SocketId = participants.player1.socketId;
-            }
-            if (participants.player2) {
-                this.players.player2 = participants.player2.name;
-                this.players.player2SocketId = participants.player2.socketId;
-            }
+                // Если появился новый участник
+                if (!oldSocketId && newSocketId && newSocketId !== this.socket.id) {
+                    console.log(`🆕 Новый участник ${role} (${newSocketId})`);
+                    if (this.localStream) {
+                        this.createPeerConnection(newSocketId, true);
+                    }
+                }
+                // Если участник ушёл (newSocketId === null)
+                if (oldSocketId && !newSocketId) {
+                    console.log(`❌ Участник ${role} (${oldSocketId}) покинул комнату`);
+                    this.closePeerConnection(oldSocketId);
+                }
+            };
+
+            updatePlayer('master', participants.master);
+            updatePlayer('player1', participants.player1);
+            updatePlayer('player2', participants.player2);
             this.players.spectators = participants.spectators || [];
-            
+
             this.updateVideoPlaceholders();
             this.updateMasterPanelNames();
-            
-            // Инициируем WebRTC соединения со всеми новыми участниками
-            if (this.localStream) {
-                this.initiateWebRTCConnections();
-            }
         });
         
-        this.socket.on('player-joined', (data) => {
-            this.showNotification(`${data.playerName} присоединился как ${this.getRoleNameFromType(data.role)}`, 'info');
-            if (data.players) {
-                this.updatePlayers(data.players);
-            }
-            this.updateConnectionInfoUI();
-        });
-        
+        // ---------- События выхода игроков ----------
         this.socket.on('player-left', (data) => {
             this.showNotification(`${data.playerName} ${data.message}`, 'warning');
-            if (data.role === 'player1') {
-                this.players.player1 = '';
-                this.players.player1SocketId = null;
-                this.updateVideoPlaceholders();
-            } else if (data.role === 'player2') {
-                this.players.player2 = '';
-                this.players.player2SocketId = null;
-                this.updateVideoPlaceholders();
-            }
-            this.updateMasterPanelNames();
+            // Обработка будет выполнена в participants-update, но дублируем для UI
             this.updateConnectionInfoUI();
         });
-        
+
         this.socket.on('spectator-joined', (data) => {
             this.showNotification(`${data.playerName} присоединился как наблюдатель`, 'info');
             this.updateConnectionInfoUI();
@@ -2187,16 +2142,13 @@ class Game {
         
         this.socket.on('room-closed', (message) => {
             this.showNotification(message, 'error');
-            setTimeout(() => {
-                location.reload();
-            }, 3000);
+            setTimeout(() => location.reload(), 3000);
         });
         
-        // ===== WebRTC сигнальные обработчики =====
+        // ========== WebRTC сигнализация ==========
         this.socket.on('webrtc-peer-ready', async ({ peerId, peerName, peerRole }) => {
             console.log(`📞 Готов к WebRTC с ${peerName} (${peerRole}), socketId: ${peerId}`);
-            // Инициируем соединение как инициатор, если у нас есть поток
-            if (this.localStream) {
+            if (this.localStream && !this.peerConnections.has(peerId) && peerId !== this.socket.id) {
                 await this.createPeerConnection(peerId, true);
             }
         });
@@ -2210,14 +2162,18 @@ class Game {
             await this.createPeerConnection(senderId, false);
             const pc = this.peerConnections.get(senderId);
             if (pc) {
-                await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                this.socket.emit('webrtc-answer', {
-                    roomCode: this.roomCode,
-                    targetPeerId: senderId,
-                    answer: pc.localDescription
-                });
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    this.socket.emit('webrtc-answer', {
+                        roomCode: this.roomCode,
+                        targetPeerId: senderId,
+                        answer: pc.localDescription
+                    });
+                } catch (err) {
+                    console.error('❌ Ошибка обработки offer:', err);
+                }
             }
         });
         
@@ -2225,7 +2181,11 @@ class Game {
             console.log(`📞 Получен answer от ${senderName}`);
             const pc = this.peerConnections.get(senderId);
             if (pc) {
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                try {
+                    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                } catch (err) {
+                    console.error('❌ Ошибка установки remote description:', err);
+                }
             }
         });
         
@@ -2236,8 +2196,7 @@ class Game {
             }
         });
         
-        // ===== ИГРОВЫЕ ОБРАБОТЧИКИ =====
-        
+        // ========== Игровые события ==========
         this.socket.on('dice-rolled', (data) => {
             console.log('🎲 Получен результат броска:', data);
             this.diceResult = data.dice;
@@ -2246,18 +2205,11 @@ class Game {
             if (diceElement) {
                 diceElement.textContent = data.dice;
                 diceElement.classList.add('rolling');
-                setTimeout(() => {
-                    diceElement.classList.remove('rolling');
-                }, 500);
+                setTimeout(() => diceElement.classList.remove('rolling'), 500);
             }
-            const taskNames = {
-                1: 'Кухня', 2: 'Бар', 3: 'Знания', 
-                4: 'Ситуация', 5: 'Сервис', 6: 'Продажи'
-            };
+            const taskNames = { 1: 'Кухня', 2: 'Бар', 3: 'Знания', 4: 'Ситуация', 5: 'Сервис', 6: 'Продажи' };
             const taskTypeElement = document.getElementById('task-type');
-            if (taskTypeElement) {
-                taskTypeElement.textContent = taskNames[data.dice];
-            }
+            if (taskTypeElement) taskTypeElement.textContent = taskNames[data.dice];
             this.showNotification(`${data.playerName} выбросил ${data.dice}!`, 'info');
             this.diceRolledInCurrentTurn = true;
             this.waitingForAnswer = true;
@@ -2271,25 +2223,18 @@ class Game {
             this.currentQuestion = data.question;
             this.currentQuestionCategory = data.category;
             this.showQuestion(data.question, data.category, data.instruction, isAnsweringPlayer);
-            if (this.gameMode === 'local') {
-                this.startTimer();
-            }
+            if (this.gameMode === 'local') this.startTimer();
         });
         
         this.socket.on('answer-completed-by-player', () => {
             console.log('✅ Игрок завершил ответ, показываем кнопку для ведущего');
-            if (this.role === 'master') {
-                this.showMasterButtonInCard();
-            }
+            if (this.role === 'master') this.showMasterButtonInCard();
         });
         
         this.socket.on('master-started-evaluation', () => {
             console.log('👑 Ведущий начал оценивание');
-            // Выключаем PiP
-            this.setPipForPlayer(false);
-            if (this.role !== 'master') {
-                this.hideCard();
-            }
+            this.setPipForPlayer(false); // выключаем PiP
+            if (this.role !== 'master') this.hideCard();
         });
         
         this.socket.on('master-finished-evaluation', () => {
@@ -2346,9 +2291,7 @@ class Game {
             this.updateScores();
             this.updateTurnIndicator();
             const diceElement = document.getElementById('dice');
-            if (diceElement && this.diceResult > 0) {
-                diceElement.textContent = this.diceResult;
-            }
+            if (diceElement && this.diceResult > 0) diceElement.textContent = this.diceResult;
         });
         
         this.socket.on('turn-changed', (data) => {
@@ -2366,9 +2309,7 @@ class Game {
         
         this.socket.on('timer-update', (data) => {
             const timerElement = document.getElementById('timer');
-            if (timerElement) {
-                timerElement.textContent = data.timer;
-            }
+            if (timerElement) timerElement.textContent = data.timer;
         });
         
         this.socket.on('timer-ended', () => {
@@ -2379,16 +2320,12 @@ class Game {
             if (isAnsweringPlayer) {
                 this.hideCard();
                 this.answerCompleted = true;
-                if (this.socket && this.isConnected) {
-                    this.socket.emit('answer-completed');
-                }
+                if (this.socket && this.isConnected) this.socket.emit('answer-completed');
             }
             this.showNotification('Время вышло!', 'warning');
         });
         
-        this.socket.on('hide-card', () => {
-            this.hideCard();
-        });
+        this.socket.on('hide-card', () => this.hideCard());
         
         this.socket.on('game-over', (data) => {
             console.log('🏆 Игра окончена!', data);
@@ -2407,12 +2344,8 @@ class Game {
                 let slotsInfo = '';
                 if (data.slots.player1) slotsInfo += 'Игрок 1 свободен, ';
                 if (data.slots.player2) slotsInfo += 'Игрок 2 свободен';
-                if (slotsInfo) {
-                    roomStatus.innerHTML += `<br><small>${slotsInfo}</small>`;
-                }
-                if (data.spectators > 0) {
-                    roomStatus.innerHTML += `<br><small>Наблюдателей: ${data.spectators}</small>`;
-                }
+                if (slotsInfo) roomStatus.innerHTML += `<br><small>${slotsInfo}</small>`;
+                if (data.spectators > 0) roomStatus.innerHTML += `<br><small>Наблюдателей: ${data.spectators}</small>`;
             } else {
                 roomStatus.innerHTML = `<i class="fas fa-times-circle"></i> Комната не найдена`;
                 roomStatus.className = 'room-status not-found';
@@ -2421,39 +2354,7 @@ class Game {
     }
 }
 
-// Добавляем CSS для PiP
-const style = document.createElement('style');
-style.textContent = `
-    .video-box.pip-active {
-        position: fixed !important;
-        top: 20px !important;
-        right: 20px !important;
-        left: auto !important;
-        bottom: auto !important;
-        width: 320px !important;
-        height: 240px !important;
-        z-index: 9999 !important;
-        border: 4px solid #FFC107 !important;
-        box-shadow: 0 0 30px rgba(255, 193, 7, 0.8) !important;
-        animation: pipAppear 0.3s ease-out;
-    }
-    
-    @keyframes pipAppear {
-        from { transform: scale(0.8); opacity: 0; }
-        to { transform: scale(1); opacity: 1; }
-    }
-    
-    .video-box.pip-active .video-placeholder {
-        width: 100%;
-        height: 100%;
-    }
-    
-    .video-box.pip-active video {
-        object-fit: cover !important;
-    }
-`;
-document.head.appendChild(style);
-
+// ========== Запуск игры ==========
 document.addEventListener('DOMContentLoaded', () => {
     window.game = new Game();
 });
