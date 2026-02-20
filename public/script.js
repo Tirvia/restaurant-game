@@ -1,6 +1,6 @@
-// Полный исправленный script.js
-// Версия 5.0 – стабильные WebRTC для всех участников (включая наблюдателей)
-// Убран PiP, улучшена адаптивность видео
+\// Полный исправленный script.js
+// Версия 6.0 – корректная WebRTC mesh-сеть только для ведущего и игроков,
+// наблюдатели исключены из WebRTC и не ломают соединения.
 
 class Game {
     constructor() {
@@ -64,7 +64,7 @@ class Game {
             master: null,
             player1: null,
             player2: null,
-            spectators: new Map() // socketId -> { name, role: 'spectator' }
+            spectators: new Map() // socketId -> { name }
         };
         
         // ========== Анимация ==========
@@ -380,6 +380,10 @@ class Game {
     // ========== WebRTC ==========
     async initVideo() {
         console.log('🎥 initVideo() для роли:', this.role);
+        if (this.role === 'spectator') {
+            console.log('👀 Наблюдатель не инициализирует WebRTC');
+            return;
+        }
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => track.stop());
             this.localStream = null;
@@ -399,11 +403,10 @@ class Game {
             const containerId = this.getVideoContainerIdByRole();
             if (containerId) this.displayLocalStream(containerId);
             
+            // Если уже есть соединения (после переподключения), пробуем создать их заново
             if (this.socket && this.roomCode) {
-                // Сообщаем всем, что мы готовы к WebRTC
+                // Отправляем сигнал готовности к WebRTC (сервер может переслать пирам)
                 this.socket.emit('webrtc-ready', { roomCode: this.roomCode });
-                // Инициируем соединения со всеми участниками
-                this.initiateWebRTCConnections();
             }
         } catch (error) {
             console.error('❌ Ошибка доступа к камере:', error);
@@ -434,14 +437,14 @@ class Game {
         this.setVideoContainerColor(containerId, this.role);
     }
 
-    async createPeerConnection(targetSocketId, isInitiator = false) {
-        if (targetSocketId === this.socket?.id) {
+    async createPeerConnection(peerId, isInitiator = false) {
+        if (peerId === this.socket?.id) {
             console.warn('⚠️ Пропускаем подключение к себе');
             return null;
         }
-        if (this.peerConnections.has(targetSocketId)) {
-            console.log('⚠️ Соединение уже существует с', targetSocketId);
-            return this.peerConnections.get(targetSocketId);
+        if (this.peerConnections.has(peerId)) {
+            console.log('⚠️ Соединение уже существует с', peerId);
+            return this.peerConnections.get(peerId);
         }
         if (!this.localStream) {
             console.log('⚠️ Нет локального потока, соединение не создано');
@@ -462,7 +465,7 @@ class Game {
         };
 
         const pc = new RTCPeerConnection(config);
-        this.peerConnections.set(targetSocketId, pc);
+        this.peerConnections.set(peerId, pc);
 
         // Добавляем локальные треки
         this.localStream.getTracks().forEach(track => {
@@ -473,7 +476,7 @@ class Game {
             if (event.candidate) {
                 this.socket.emit('webrtc-ice-candidate', {
                     roomCode: this.roomCode,
-                    targetPeerId: targetSocketId,
+                    targetPeerId: peerId,
                     candidate: event.candidate
                 });
             }
@@ -483,26 +486,26 @@ class Game {
             console.warn('❌ ICE candidate error:', event);
             // Пробуем пересоздать соединение через 2 секунды
             setTimeout(() => {
-                if (this.peerConnections.has(targetSocketId)) {
-                    this.closePeerConnection(targetSocketId);
-                    this.createPeerConnection(targetSocketId, true);
+                if (this.peerConnections.has(peerId)) {
+                    this.closePeerConnection(peerId);
+                    this.createPeerConnection(peerId, true);
                 }
             }, 2000);
         };
 
         pc.ontrack = (event) => {
-            console.log('📹 Получен удалённый поток от', targetSocketId);
+            console.log('📹 Получен удалённый поток от', peerId);
             const remoteStream = event.streams[0];
             if (remoteStream) {
-                this.remoteStreams.set(targetSocketId, remoteStream);
-                this.displayRemoteStream(targetSocketId, remoteStream);
+                this.remoteStreams.set(peerId, remoteStream);
+                this.displayRemoteStream(peerId, remoteStream);
             }
         };
 
         pc.onconnectionstatechange = () => {
-            console.log(`🔌 Состояние соединения с ${targetSocketId}: ${pc.connectionState}`);
+            console.log(`🔌 Состояние соединения с ${peerId}: ${pc.connectionState}`);
             if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-                this.closePeerConnection(targetSocketId);
+                this.closePeerConnection(peerId);
             }
         };
 
@@ -515,12 +518,12 @@ class Game {
                 await pc.setLocalDescription(offer);
                 this.socket.emit('webrtc-offer', {
                     roomCode: this.roomCode,
-                    targetPeerId: targetSocketId,
+                    targetPeerId: peerId,
                     offer: pc.localDescription
                 });
             } catch (err) {
                 console.error('❌ Ошибка создания offer:', err);
-                this.closePeerConnection(targetSocketId);
+                this.closePeerConnection(peerId);
             }
         }
 
@@ -538,7 +541,7 @@ class Game {
     }
 
     clearVideoContainer(socketId) {
-        // Определяем роль по socketId
+        // Определяем роль по socketId (если это известный пир)
         let role = null;
         if (socketId === this.players.master?.socketId) {
             role = 'master';
@@ -547,7 +550,7 @@ class Game {
         } else if (socketId === this.players.player2?.socketId) {
             role = 'player2';
         } else {
-            // Если это наблюдатель, просто удаляем его поток, но контейнеров для наблюдателей нет
+            // Если неизвестный пир (например, наблюдатель не должен сюда попадать)
             return;
         }
 
@@ -577,7 +580,7 @@ class Game {
         } else if (socketId === this.players.player2?.socketId) {
             role = 'player2';
         } else {
-            console.log('👀 Получен поток от наблюдателя, не отображаем');
+            console.log('👀 Получен поток от неизвестного пира (возможно, наблюдателя), не отображаем');
             return;
         }
 
@@ -611,38 +614,6 @@ class Game {
         this.setVideoContainerColor(containerId, role);
     }
 
-    initiateWebRTCConnections() {
-        if (!this.localStream || !this.socket || !this.roomCode) {
-            console.log('⚠️ Невозможно инициировать WebRTC: нет локального потока, сокета или комнаты');
-            return;
-        }
-        console.log('🔄 Инициируем WebRTC соединения со всеми участниками...');
-
-        // Собираем всех участников
-        const participants = [];
-        if (this.players.master && this.players.master.socketId !== this.socket.id) {
-            participants.push({ id: this.players.master.socketId, name: this.players.master.name });
-        }
-        if (this.players.player1 && this.players.player1.socketId !== this.socket.id) {
-            participants.push({ id: this.players.player1.socketId, name: this.players.player1.name });
-        }
-        if (this.players.player2 && this.players.player2.socketId !== this.socket.id) {
-            participants.push({ id: this.players.player2.socketId, name: this.players.player2.name });
-        }
-        this.players.spectators.forEach((data, socketId) => {
-            if (socketId !== this.socket.id) {
-                participants.push({ id: socketId, name: data.name });
-            }
-        });
-
-        participants.forEach(participant => {
-            if (!this.peerConnections.has(participant.id)) {
-                console.log(`🔗 Инициируем WebRTC соединение с ${participant.name} (${participant.id})`);
-                this.createPeerConnection(participant.id, true);
-            }
-        });
-    }
-
     // ========== Методы интерфейса ==========
     getVideoContainerIdByRole(role = this.role) {
         const roleMap = {
@@ -658,6 +629,7 @@ class Game {
             case 'master': return `Ведущий: ${this.playerName}`;
             case 'player1': return `Команда 1: ${this.playerName}`;
             case 'player2': return `Команда 2: ${this.playerName}`;
+            case 'spectator': return `Наблюдатель: ${this.playerName}`;
             default: return this.playerName;
         }
     }
@@ -734,8 +706,11 @@ class Game {
     // ========== Игровая логика ==========
     async continueGameInitialization() {
         console.log('🎥 Инициализируем видео...');
-        if (this.gameMode === 'online') {
+        if (this.gameMode === 'online' && this.role !== 'spectator') {
             await this.initVideo();
+        } else if (this.gameMode === 'online' && this.role === 'spectator') {
+            // Наблюдатель не инициирует видео, но показываем плейсхолдеры
+            this.updateVideoPlaceholders();
         }
         console.log('🃏 Загружаем карты...');
         await this.loadCards();
@@ -1699,7 +1674,7 @@ class Game {
         this.players.spectators.clear();
         if (players.spectators && Array.isArray(players.spectators)) {
             players.spectators.forEach(s => {
-                this.players.spectators.set(s.socketId, { name: s.name, role: 'spectator' });
+                this.players.spectators.set(s.socketId, { name: s.name });
             });
         }
         
@@ -1716,16 +1691,6 @@ class Game {
         }
         if (masterTeam2) {
             masterTeam2.textContent = `Команда 2: ${this.players.player2?.name || 'Ожидает'}`;
-        }
-    }
-
-    getRoleNameFromType(roleType) {
-        switch(roleType) {
-            case 'master': return 'Ведущий';
-            case 'player1': return 'Команда 1';
-            case 'player2': return 'Команда 2';
-            case 'spectator': return 'Наблюдатель';
-            default: return 'Игрок';
         }
     }
 
@@ -1901,8 +1866,8 @@ class Game {
                     role: this.role
                 });
             }
-            // Если поток пропал, запросить заново
-            if (!this.localStream) {
+            // Если поток пропал, запросить заново (только если не наблюдатель)
+            if (!this.localStream && this.role !== 'spectator') {
                 this.initVideo();
             }
         });
@@ -1962,15 +1927,9 @@ class Game {
             
             // Сохраняем данные участников из data.players
             if (data.players) {
-                this.players.master = data.players.master ? { name: data.players.master.name, socketId: data.players.master.socketId } : null;
-                this.players.player1 = data.players.player1 ? { name: data.players.player1.name, socketId: data.players.player1.socketId } : null;
-                this.players.player2 = data.players.player2 ? { name: data.players.player2.name, socketId: data.players.player2.socketId } : null;
-                this.players.spectators.clear();
-                if (data.players.spectators && Array.isArray(data.players.spectators)) {
-                    data.players.spectators.forEach(s => {
-                        this.players.spectators.set(s.socketId, { name: s.name, role: 'spectator' });
-                    });
-                }
+                this.players.master = { name: data.players.master, socketId: null }; // socketId пока неизвестен, будет в participants-update
+                this.players.player1 = data.players.player1 ? { name: data.players.player1, socketId: null } : null;
+                this.players.player2 = data.players.player2 ? { name: data.players.player2, socketId: null } : null;
             }
             
             if (data.gameState) {
@@ -1981,9 +1940,6 @@ class Game {
                 this.isSpecialZoneActive = data.gameState.isSpecialZoneActive || false;
             }
             
-            this.updateVideoPlaceholders();
-            this.updateMasterPanelNames();
-            
             statusText.innerHTML = '<i class="fas fa-check-circle"></i> Вы в игре!';
             
             setTimeout(() => {
@@ -1992,23 +1948,47 @@ class Game {
             }, 2000);
             
             this.updateConnectionInfoUI();
-            
-            // Если есть локальный поток – начинаем WebRTC
-            if (this.localStream) {
-                this.socket.emit('webrtc-ready', { roomCode: this.roomCode });
-                this.initiateWebRTCConnections();
+        });
+
+        // ---------- WebRTC сигнализация (только для пиров) ----------
+        this.socket.on('existing-peers', (peerIds) => {
+            console.log('👥 Существующие пиры:', peerIds);
+            if (this.role === 'spectator') {
+                console.log('👀 Наблюдатель игнорирует existing-peers');
+                return;
             }
+            peerIds.forEach(peerId => {
+                if (!this.peerConnections.has(peerId) && peerId !== this.socket.id) {
+                    this.createPeerConnection(peerId, true);
+                }
+            });
+        });
+
+        this.socket.on('new-peer', (peerId) => {
+            console.log('🆕 Новый пир:', peerId);
+            if (this.role === 'spectator') {
+                console.log('👀 Наблюдатель игнорирует new-peer');
+                return;
+            }
+            if (!this.peerConnections.has(peerId) && peerId !== this.socket.id) {
+                this.createPeerConnection(peerId, false);
+            }
+        });
+
+        this.socket.on('peer-left', (peerId) => {
+            console.log('🚪 Пир покинул комнату:', peerId);
+            this.closePeerConnection(peerId);
+        });
+
+        this.socket.on('spectator-ready', (data) => {
+            console.log('👀 Наблюдатель готов:', data);
+            this.showNotification(data.message, 'info');
         });
 
         this.socket.on('participants-update', (participants) => {
             console.log('👥 participants-update:', participants);
             
-            // Обновляем список участников
-            const oldMasterSocket = this.players.master?.socketId;
-            const oldPlayer1Socket = this.players.player1?.socketId;
-            const oldPlayer2Socket = this.players.player2?.socketId;
-            const oldSpectators = new Map(this.players.spectators);
-
+            // Обновляем список участников с socketId
             this.players.master = participants.master ? { name: participants.master.name, socketId: participants.master.socketId } : null;
             this.players.player1 = participants.player1 ? { name: participants.player1.name, socketId: participants.player1.socketId } : null;
             this.players.player2 = participants.player2 ? { name: participants.player2.name, socketId: participants.player2.socketId } : null;
@@ -2016,34 +1996,19 @@ class Game {
             this.players.spectators.clear();
             if (participants.spectators && Array.isArray(participants.spectators)) {
                 participants.spectators.forEach(s => {
-                    this.players.spectators.set(s.socketId, { name: s.name, role: 'spectator' });
+                    this.players.spectators.set(s.socketId, { name: s.name });
                 });
             }
-
-            // Закрываем соединения для тех, кто вышел
-            const allOldIds = [oldMasterSocket, oldPlayer1Socket, oldPlayer2Socket, ...oldSpectators.keys()].filter(id => id && id !== this.socket.id);
-            const allNewIds = [
-                this.players.master?.socketId,
-                this.players.player1?.socketId,
-                this.players.player2?.socketId,
-                ...this.players.spectators.keys()
-            ].filter(id => id && id !== this.socket.id);
-
-            const removedIds = allOldIds.filter(id => !allNewIds.includes(id));
-            removedIds.forEach(id => this.closePeerConnection(id));
-
-            // Инициируем соединения с новыми участниками
-            allNewIds.forEach(id => {
-                if (!this.peerConnections.has(id) && this.localStream) {
-                    console.log(`🆕 Новый участник ${id}, создаём соединение`);
-                    this.createPeerConnection(id, true);
-                }
-            });
 
             this.updateVideoPlaceholders();
             this.updateMasterPanelNames();
         });
         
+        this.socket.on('player-joined', (data) => {
+            this.showNotification(`${data.playerName} присоединился как ${data.role}`, 'info');
+            this.updateConnectionInfoUI();
+        });
+
         this.socket.on('player-left', (data) => {
             this.showNotification(`${data.playerName} ${data.message}`, 'warning');
             this.updateConnectionInfoUI();
@@ -2065,15 +2030,9 @@ class Game {
         });
         
         // ========== WebRTC сигнализация ==========
-        this.socket.on('webrtc-peer-ready', async ({ peerId, peerName, peerRole }) => {
-            console.log(`📞 Готов к WebRTC с ${peerName} (${peerRole}), socketId: ${peerId}`);
-            if (this.localStream && !this.peerConnections.has(peerId) && peerId !== this.socket.id) {
-                await this.createPeerConnection(peerId, true);
-            }
-        });
-        
         this.socket.on('webrtc-offer', async ({ offer, senderId, senderName }) => {
             console.log(`📞 Получен offer от ${senderName}`);
+            if (this.role === 'spectator') return;
             if (!this.localStream) return;
             await this.createPeerConnection(senderId, false);
             const pc = this.peerConnections.get(senderId);
@@ -2095,6 +2054,7 @@ class Game {
         
         this.socket.on('webrtc-answer', async ({ answer, senderId, senderName }) => {
             console.log(`📞 Получен answer от ${senderName}`);
+            if (this.role === 'spectator') return;
             const pc = this.peerConnections.get(senderId);
             if (pc) {
                 try {
@@ -2106,13 +2066,14 @@ class Game {
         });
         
         this.socket.on('webrtc-ice-candidate', ({ candidate, senderId }) => {
+            if (this.role === 'spectator') return;
             const pc = this.peerConnections.get(senderId);
             if (pc) {
                 pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(e => console.error('❌ ICE ошибка:', e));
             }
         });
         
-        // ========== Игровые события ==========
+        // ========== Игровые события (без изменений) ==========
         this.socket.on('dice-rolled', (data) => {
             console.log('🎲 Получен бросок:', data);
             this.diceResult = data.dice;
