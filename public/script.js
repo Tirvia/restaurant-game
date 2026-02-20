@@ -1,5 +1,5 @@
 // Полный исправленный script.js
-// Версия 4.0 – стабильные WebRTC, все видят всех, PiP, восстановление после переподключения
+// Версия 4.1 – стабильные WebRTC, убран PiP, улучшена адаптивность видео
 // Включает все игровые методы (создание поля, карточки, специальные зоны и т.д.)
 
 class Game {
@@ -75,48 +75,10 @@ class Game {
         this.teamAnimationInProgress = { 1: false, 2: false };
         this.animationQueue = { 1: [], 2: [] };
         
-        // ========== Картинка-в-картинке ==========
-        this.pipActive = false;
-        this.pipPlayerSocketId = null;
-        
         // ========== Флаги ==========
         this.rejoining = false;
         
-        this.addPipStyles();
         this.init();
-    }
-
-    addPipStyles() {
-        if (document.getElementById('game-pip-styles')) return;
-        const style = document.createElement('style');
-        style.id = 'game-pip-styles';
-        style.textContent = `
-            .video-box.pip-active {
-                position: fixed !important;
-                top: 20px !important;
-                right: 20px !important;
-                left: auto !important;
-                bottom: auto !important;
-                width: 320px !important;
-                height: 240px !important;
-                z-index: 9999 !important;
-                border: 4px solid #FFC107 !important;
-                box-shadow: 0 0 30px rgba(255, 193, 7, 0.8) !important;
-                animation: pipAppear 0.3s ease-out;
-            }
-            @keyframes pipAppear {
-                from { transform: scale(0.8); opacity: 0; }
-                to { transform: scale(1); opacity: 1; }
-            }
-            .video-box.pip-active .video-placeholder {
-                width: 100%;
-                height: 100%;
-            }
-            .video-box.pip-active video {
-                object-fit: cover !important;
-            }
-        `;
-        document.head.appendChild(style);
     }
 
     async init() {
@@ -522,6 +484,17 @@ class Game {
             }
         };
 
+        pc.onicecandidateerror = (event) => {
+            console.warn('❌ ICE candidate error:', event);
+            // Пробуем пересоздать соединение через 2 секунды
+            setTimeout(() => {
+                if (this.peerConnections.has(targetSocketId)) {
+                    this.closePeerConnection(targetSocketId);
+                    this.createPeerConnection(targetSocketId, true);
+                }
+            }, 2000);
+        };
+
         pc.ontrack = (event) => {
             console.log('📹 Получен удалённый поток от', targetSocketId);
             const remoteStream = event.streams[0];
@@ -637,11 +610,6 @@ class Game {
         placeholder.appendChild(label);
         
         this.setVideoContainerColor(containerId, role);
-
-        // Если это PiP – применяем стиль
-        if (this.pipActive && socketId === this.pipPlayerSocketId) {
-            this.applyPipStyle(containerId, true);
-        }
     }
 
     initiateWebRTCConnections() {
@@ -663,38 +631,6 @@ class Game {
                 this.createPeerConnection(target.id, true);
             }
         });
-    }
-
-    // ========== Картинка-в-картинке ==========
-    setPipForPlayer(active, playerSocketId = null) {
-        this.pipActive = active;
-        this.pipPlayerSocketId = playerSocketId;
-
-        // Сбрасываем PiP со всех контейнеров
-        ['video-master-container', 'video-team1-container', 'video-team2-container'].forEach(id => {
-            this.applyPipStyle(id, false);
-        });
-
-        if (active && playerSocketId) {
-            let targetId = null;
-            if (playerSocketId === this.players.player1SocketId) {
-                targetId = 'video-team1-container';
-            } else if (playerSocketId === this.players.player2SocketId) {
-                targetId = 'video-team2-container';
-            } else if (playerSocketId === this.players.masterSocketId) {
-                targetId = 'video-master-container';
-            }
-            if (targetId) {
-                this.applyPipStyle(targetId, true);
-            }
-        }
-    }
-
-    applyPipStyle(containerId, enable) {
-        const container = document.getElementById(containerId);
-        if (container) {
-            container.classList.toggle('pip-active', enable);
-        }
     }
 
     // ========== Методы интерфейса ==========
@@ -1172,11 +1108,6 @@ class Game {
         const answerBtn = document.getElementById('answer-received');
         const masterBtn = document.getElementById('master-evaluation');
 
-        // Активируем PiP для отвечающего игрока
-        if (isAnsweringPlayer && this.role !== 'master') {
-            this.setPipForPlayer(true, this.socket.id);
-        }
-
         if (this.gameMode === 'online') {
             if (isAnsweringPlayer) {
                 answerBtn.style.display = 'block';
@@ -1266,7 +1197,6 @@ class Game {
             this.answerCompleted = true;
         }
         this.hideCard();
-        this.setPipForPlayer(false); // выключаем PiP
         if (this.gameMode === 'local' || this.role === 'master') {
             setTimeout(() => this.showMasterPanel(), 500);
         }
@@ -1960,6 +1890,10 @@ class Game {
                     role: this.role
                 });
             }
+            // Если поток пропал, запросить заново
+            if (!this.localStream) {
+                this.initVideo();
+            }
         });
         
         // ---------- События комнат ----------
@@ -2194,7 +2128,6 @@ class Game {
         
         this.socket.on('master-started-evaluation', () => {
             console.log('👑 Ведущий начал оценивание');
-            this.setPipForPlayer(false);
             if (this.role !== 'master') this.hideCard();
         });
         
