@@ -309,103 +309,127 @@ io.on('connection', (socket) => {
 
     let assignedRole = role;
     
-    if (role === 'player') {
-      if (!room.player1) {
-        assignedRole = 'player1';
-        room.player1 = { 
-          id: socket.id, 
-          name: playerName,
-          joinedAt: Date.now()
-        };
-      } else if (!room.player2) {
-        assignedRole = 'player2';
-        room.player2 = { 
-          id: socket.id, 
-          name: playerName,
-          joinedAt: Date.now()
-        };
-      } else {
-        socket.emit('role-unavailable', {
-          message: 'Все места для игроков заняты. Вы можете присоединиться как наблюдатель',
-          availableRoles: ['spectator']
-        });
-        return;
+    // ---------- РАЗДЕЛЕНИЕ НА ПИРОВ И НАБЛЮДАТЕЛЕЙ ----------
+    const isPeer = role === 'master' || role === 'player1' || role === 'player2' || role === 'player';
+    
+    if (isPeer) {
+      // Если роль 'player', преобразуем в player1/player2
+      if (role === 'player') {
+        if (!room.player1) {
+          assignedRole = 'player1';
+          room.player1 = { id: socket.id, name: playerName, joinedAt: Date.now() };
+        } else if (!room.player2) {
+          assignedRole = 'player2';
+          room.player2 = { id: socket.id, name: playerName, joinedAt: Date.now() };
+        } else {
+          socket.emit('role-unavailable', {
+            message: 'Все места для игроков заняты. Вы можете присоединиться как наблюдатель',
+            availableRoles: ['spectator']
+          });
+          return;
+        }
+      } else if (role === 'master') {
+        // Мастер уже создан, но на всякий случай проверим
+        if (room.master) {
+          socket.emit('error', { message: 'Ведущий уже есть в комнате' });
+          return;
+        }
+        // Сюда не должны попасть, т.к. мастер создаётся отдельно
+      } else if (role === 'player1' || role === 'player2') {
+        // Проверяем, свободно ли место
+        if (role === 'player1' && room.player1) {
+          socket.emit('error', { message: 'Место игрока 1 занято' });
+          return;
+        }
+        if (role === 'player2' && room.player2) {
+          socket.emit('error', { message: 'Место игрока 2 занято' });
+          return;
+        }
+        if (role === 'player1') room.player1 = { id: socket.id, name: playerName, joinedAt: Date.now() };
+        if (role === 'player2') room.player2 = { id: socket.id, name: playerName, joinedAt: Date.now() };
       }
-    } else if (role === 'spectator') {
-      room.spectators.set(socket.id, { 
-        id: socket.id, 
-        name: playerName,
-        joinedAt: Date.now()
-      });
-      assignedRole = 'spectator';
-    } else {
-      socket.emit('error', { 
-        code: 'INVALID_ROLE', 
-        message: 'Неверная роль' 
-      });
-      return;
-    }
 
-    socket.join(roomCode);
-    socket.data = {
-      roomCode,
-      role: assignedRole,
-      playerName,
-      id: socket.id,
-      joinedAt: Date.now()
-    };
+      socket.join(roomCode);
+      socket.data = { roomCode, role: assignedRole, playerName, id: socket.id, joinedAt: Date.now() };
+
+      // ---------- ОТПРАВКА СПИСКА СУЩЕСТВУЮЩИХ ПИРОВ НОВОМУ ПИРУ ----------
+      const peers = [];
+      if (room.master && room.master.id !== socket.id) peers.push(room.master.id);
+      if (room.player1 && room.player1.id !== socket.id) peers.push(room.player1.id);
+      if (room.player2 && room.player2.id !== socket.id) peers.push(room.player2.id);
+      
+      socket.emit('existing-peers', peers);
+
+      // ---------- УВЕДОМЛЕНИЕ ОСТАЛЬНЫХ ПИРОВ О НОВОМ ----------
+      peers.forEach(peerId => {
+        io.to(peerId).emit('new-peer', socket.id);
+      });
+
+      // Обновляем список участников для всех (для интерфейса)
+      const allParticipants = {
+        master: { name: room.master.name, socketId: room.master.id },
+        player1: room.player1 ? { name: room.player1.name, socketId: room.player1.id } : null,
+        player2: room.player2 ? { name: room.player2.name, socketId: room.player2.id } : null,
+        spectators: Array.from(room.spectators.values()).map(s => ({ name: s.name, socketId: s.id }))
+      };
+      io.to(roomCode).emit('participants-update', allParticipants);
+
+      // Успешное подключение
+      socket.emit('join-success', {
+        roomCode,
+        role: assignedRole,
+        playerName,
+        gameState: room.state,
+        players: {
+          master: room.master.name,
+          player1: room.player1?.name || null,
+          player2: room.player2?.name || null
+        },
+        gameMode: room.gameMode,
+        timestamp: new Date().toISOString()
+      });
+
+      // Уведомляем всех в комнате о новом игроке
+      io.to(roomCode).emit('player-joined', {
+        playerName,
+        role: assignedRole,
+        players: {
+          master: room.master.name,
+          player1: room.player1?.name,
+          player2: room.player2?.name
+        },
+        timestamp: new Date().toISOString()
+      });
+
+      console.log(`✅ ${playerName} присоединился как ${assignedRole} в комнату ${roomCode}`);
+
+    } else if (role === 'spectator') {
+      // ---------- НАБЛЮДАТЕЛЬ ----------
+      room.spectators.set(socket.id, { id: socket.id, name: playerName, joinedAt: Date.now() });
+      socket.join(roomCode);
+      socket.data = { roomCode, role: 'spectator', playerName, id: socket.id, joinedAt: Date.now() };
+
+      // Отправляем только уведомление о готовности (никаких пиров)
+      socket.emit('spectator-ready', { message: 'Вы подключены как наблюдатель' });
+
+      // Обновляем список участников для всех
+      const allParticipants = {
+        master: { name: room.master.name, socketId: room.master.id },
+        player1: room.player1 ? { name: room.player1.name, socketId: room.player1.id } : null,
+        player2: room.player2 ? { name: room.player2.name, socketId: room.player2.id } : null,
+        spectators: Array.from(room.spectators.values()).map(s => ({ name: s.name, socketId: s.id }))
+      };
+      io.to(roomCode).emit('participants-update', allParticipants);
+
+      // Уведомляем о присоединении наблюдателя
+      io.to(roomCode).emit('spectator-joined', { playerName });
+
+      console.log(`👀 Наблюдатель ${playerName} присоединился к комнате ${roomCode}`);
+    }
 
     room.lastActivity = Date.now();
 
-    // Отправляем всем участникам комнаты обновлённый список (с socketId для WebRTC)
-    const allParticipants = {
-      master: { 
-        name: room.master.name, 
-        socketId: room.master.id 
-      },
-      player1: room.player1 ? { 
-        name: room.player1.name, 
-        socketId: room.player1.id 
-      } : null,
-      player2: room.player2 ? { 
-        name: room.player2.name, 
-        socketId: room.player2.id 
-      } : null,
-      spectators: Array.from(room.spectators.values()).map(s => ({ 
-        name: s.name, 
-        socketId: s.id 
-      }))
-    };
-    io.to(roomCode).emit('participants-update', allParticipants);
-
-    // Успешное подключение
-    socket.emit('join-success', {
-      roomCode,
-      role: assignedRole,
-      playerName,
-      gameState: room.state,
-      players: {
-        master: room.master.name,
-        player1: room.player1?.name || null,
-        player2: room.player2?.name || null
-      },
-      gameMode: room.gameMode,
-      timestamp: new Date().toISOString()
-    });
-
-    // Уведомляем всех в комнате
-    io.to(roomCode).emit('player-joined', {
-      playerName,
-      role: assignedRole,
-      players: {
-        master: room.master.name,
-        player1: room.player1?.name,
-        player2: room.player2?.name
-      },
-      timestamp: new Date().toISOString()
-    });
-
-    // Если комната заполнена, уведомляем о начале игры
+    // Если комната заполнена (оба игрока есть) и игра ещё не начата
     if (room.player1 && room.player2 && !room.state.gameStarted) {
       room.state.gameStarted = true;
       io.to(roomCode).emit('game-started', {
@@ -419,8 +443,6 @@ io.on('connection', (socket) => {
       totalRooms: Array.from(rooms.keys()).length,
       activePlayers: io.engine.clientsCount
     });
-
-    console.log(`✅ ${playerName} присоединился как ${assignedRole} в комнату ${roomCode}`);
   });
 
   // ---------- Проверка комнаты ----------
@@ -480,7 +502,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // ---------- Игровые события ----------
+  // ---------- Игровые события (без изменений) ----------
   socket.on('roll-dice', () => {
     const { roomCode, role, playerName } = socket.data;
     if (!roomCode) {
@@ -829,29 +851,10 @@ io.on('connection', (socket) => {
     socket.emit('pong', { timestamp: Date.now() });
   });
 
-  // ---------- WebRTC сигнализация ----------
-  socket.on('webrtc-ready', ({ roomCode }) => {
-    const room = rooms.get(roomCode);
-    if (!room) return;
-    
-    // Уведомляем всех участников комнаты, что этот клиент готов
-    const participants = [
-      room.master?.id,
-      room.player1?.id,
-      room.player2?.id,
-      ...Array.from(room.spectators.keys())
-    ].filter(id => id && id !== socket.id);
-    
-    participants.forEach(participantId => {
-      io.to(participantId).emit('webrtc-peer-ready', {
-        peerId: socket.id,
-        peerName: socket.data?.playerName,
-        peerRole: socket.data?.role
-      });
-    });
-  });
-
+  // ---------- WebRTC сигнализация (только для пиров) ----------
   socket.on('webrtc-offer', ({ roomCode, targetPeerId, offer }) => {
+    // Проверяем, что отправитель не наблюдатель
+    if (socket.data?.role === 'spectator') return;
     socket.to(targetPeerId).emit('webrtc-offer', {
       offer,
       senderId: socket.id,
@@ -860,6 +863,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('webrtc-answer', ({ roomCode, targetPeerId, answer }) => {
+    if (socket.data?.role === 'spectator') return;
     socket.to(targetPeerId).emit('webrtc-answer', {
       answer,
       senderId: socket.id,
@@ -868,6 +872,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('webrtc-ice-candidate', ({ roomCode, targetPeerId, candidate }) => {
+    if (socket.data?.role === 'spectator') return;
     socket.to(targetPeerId).emit('webrtc-ice-candidate', {
       candidate,
       senderId: socket.id
@@ -884,53 +889,58 @@ io.on('connection', (socket) => {
 
     room.lastActivity = Date.now();
 
-    if (role === 'master') {
-      if (timers.has(roomCode)) {
-        clearInterval(timers.get(roomCode));
-        timers.delete(roomCode);
+    const isPeer = role && role !== 'spectator';
+
+    if (isPeer) {
+      // Определяем, кто именно отключился
+      let peerId = null;
+      if (role === 'master' && room.master?.id === socket.id) {
+        room.master = null;
+        peerId = socket.id;
+      } else if (role === 'player1' && room.player1?.id === socket.id) {
+        room.player1 = null;
+        peerId = socket.id;
+      } else if (role === 'player2' && room.player2?.id === socket.id) {
+        room.player2 = null;
+        peerId = socket.id;
       }
-      rooms.delete(roomCode);
-      if (room.gameMode === 'online') {
-        io.to(roomCode).emit('room-closed', {
-          message: 'Ведущий покинул игру. Комната удалена.',
-          reason: 'master_left'
+
+      if (peerId) {
+        // Уведомляем остальных пиров об отключении
+        const otherPeers = [];
+        if (room.master) otherPeers.push(room.master.id);
+        if (room.player1) otherPeers.push(room.player1.id);
+        if (room.player2) otherPeers.push(room.player2.id);
+        otherPeers.forEach(id => io.to(id).emit('peer-left', peerId));
+
+        // Если отключился мастер, удаляем комнату
+        if (role === 'master') {
+          if (timers.has(roomCode)) {
+            clearInterval(timers.get(roomCode));
+            timers.delete(roomCode);
+          }
+          rooms.delete(roomCode);
+          io.to(roomCode).emit('room-closed', {
+            message: 'Ведущий покинул игру. Комната удалена.',
+            reason: 'master_left'
+          });
+          io.in(roomCode).socketsLeave(roomCode);
+          console.log(`🗑️ Комната ${roomCode} удалена (ведущий отключился)`);
+          return; // дальше не обрабатываем, т.к. комнаты уже нет
+        }
+
+        // Если не осталось игроков, помечаем игру как не начатую
+        if (!room.player1 || !room.player2) {
+          room.state.gameStarted = false;
+        }
+
+        io.to(roomCode).emit('player-left', {
+          role,
+          playerName,
+          message: `${playerName} вышел. Ждем повторного подключения.`,
+          timestamp: new Date().toISOString()
         });
-        io.in(roomCode).socketsLeave(roomCode);
       }
-      console.log(`🗑️ Комната ${roomCode} удалена (ведущий отключился)`);
-    } else if (role === 'player1') {
-      room.player1 = null;
-      io.to(roomCode).emit('player-left', { 
-        role: 'player1', 
-        playerName,
-        message: `${playerName} вышел. Ждем повторного подключения.`,
-        timestamp: new Date().toISOString()
-      });
-      if (!room.player2) room.state.gameStarted = false;
-      // Обновляем список участников
-      const allParticipants = {
-        master: { name: room.master.name, socketId: room.master.id },
-        player1: null,
-        player2: room.player2 ? { name: room.player2.name, socketId: room.player2.id } : null,
-        spectators: Array.from(room.spectators.values()).map(s => ({ name: s.name, socketId: s.id }))
-      };
-      io.to(roomCode).emit('participants-update', allParticipants);
-    } else if (role === 'player2') {
-      room.player2 = null;
-      io.to(roomCode).emit('player-left', { 
-        role: 'player2', 
-        playerName,
-        message: `${playerName} вышел. Ждем повторного подключения.`,
-        timestamp: new Date().toISOString()
-      });
-      if (!room.player1) room.state.gameStarted = false;
-      const allParticipants = {
-        master: { name: room.master.name, socketId: room.master.id },
-        player1: room.player1 ? { name: room.player1.name, socketId: room.player1.id } : null,
-        player2: null,
-        spectators: Array.from(room.spectators.values()).map(s => ({ name: s.name, socketId: s.id }))
-      };
-      io.to(roomCode).emit('participants-update', allParticipants);
     } else if (role === 'spectator') {
       room.spectators.delete(socket.id);
       io.to(roomCode).emit('spectator-left', {
@@ -938,8 +948,12 @@ io.on('connection', (socket) => {
         message: `${playerName} покинул комнату как наблюдатель`,
         timestamp: new Date().toISOString()
       });
+    }
+
+    // Обновляем список участников для всех
+    if (rooms.has(roomCode)) {
       const allParticipants = {
-        master: { name: room.master.name, socketId: room.master.id },
+        master: room.master ? { name: room.master.name, socketId: room.master.id } : null,
         player1: room.player1 ? { name: room.player1.name, socketId: room.player1.id } : null,
         player2: room.player2 ? { name: room.player2.name, socketId: room.player2.id } : null,
         spectators: Array.from(room.spectators.values()).map(s => ({ name: s.name, socketId: s.id }))
