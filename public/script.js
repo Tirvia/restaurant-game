@@ -1,6 +1,6 @@
 // Полный исправленный script.js
-// Версия 4.1 – стабильные WebRTC, убран PiP, улучшена адаптивность видео
-// Включает все игровые методы (создание поля, карточки, специальные зоны и т.д.)
+// Версия 5.0 – стабильные WebRTC для всех участников (включая наблюдателей)
+// Убран PiP, улучшена адаптивность видео
 
 class Game {
     constructor() {
@@ -58,25 +58,18 @@ class Game {
         this.localStream = null;
         this.peerConnections = new Map(); // socketId -> RTCPeerConnection
         this.remoteStreams = new Map();    // socketId -> MediaStream
-        this.reconnectTimer = null;
         
         // ========== Участники комнаты ==========
         this.players = {
-            master: '',
-            player1: '',
-            player2: '',
-            masterSocketId: null,
-            player1SocketId: null,
-            player2SocketId: null,
-            spectators: []
+            master: null,
+            player1: null,
+            player2: null,
+            spectators: new Map() // socketId -> { name, role: 'spectator' }
         };
         
         // ========== Анимация ==========
         this.teamAnimationInProgress = { 1: false, 2: false };
         this.animationQueue = { 1: [], 2: [] };
-        
-        // ========== Флаги ==========
-        this.rejoining = false;
         
         this.init();
     }
@@ -407,7 +400,9 @@ class Game {
             if (containerId) this.displayLocalStream(containerId);
             
             if (this.socket && this.roomCode) {
+                // Сообщаем всем, что мы готовы к WebRTC
                 this.socket.emit('webrtc-ready', { roomCode: this.roomCode });
+                // Инициируем соединения со всеми участниками
                 this.initiateWebRTCConnections();
             }
         } catch (error) {
@@ -543,49 +538,51 @@ class Game {
     }
 
     clearVideoContainer(socketId) {
-        let containerId = null;
-        if (socketId === this.players.masterSocketId) {
-            containerId = 'video-master-container';
-        } else if (socketId === this.players.player1SocketId) {
-            containerId = 'video-team1-container';
-        } else if (socketId === this.players.player2SocketId) {
-            containerId = 'video-team2-container';
+        // Определяем роль по socketId
+        let role = null;
+        if (socketId === this.players.master?.socketId) {
+            role = 'master';
+        } else if (socketId === this.players.player1?.socketId) {
+            role = 'player1';
+        } else if (socketId === this.players.player2?.socketId) {
+            role = 'player2';
         } else {
+            // Если это наблюдатель, просто удаляем его поток, но контейнеров для наблюдателей нет
             return;
         }
 
+        const containerId = this.getVideoContainerIdByRole(role);
+        if (!containerId) return;
+        
         const container = document.getElementById(containerId);
         if (!container) return;
         const placeholder = container.querySelector('.video-placeholder');
         if (!placeholder) return;
 
         // Если это не наш контейнер (не наше локальное видео), восстанавливаем плейсхолдер
-        if (this.getVideoContainerIdByRole() !== containerId) {
-            const role = containerId === 'video-master-container' ? 'master' :
-                        containerId === 'video-team1-container' ? 'player1' : 'player2';
-            const playerName = role === 'master' ? this.players.master :
-                              role === 'player1' ? this.players.player1 : this.players.player2;
+        if (this.getVideoContainerIdByRole(this.role) !== containerId) {
+            const playerName = role === 'master' ? this.players.master?.name :
+                              role === 'player1' ? this.players.player1?.name : this.players.player2?.name;
             this.updatePlaceholder(containerId, role, playerName);
         }
     }
 
     displayRemoteStream(socketId, stream) {
-        let containerId = null;
+        // Определяем роль по socketId
         let role = null;
-
-        if (socketId === this.players.masterSocketId) {
-            containerId = 'video-master-container';
+        if (socketId === this.players.master?.socketId) {
             role = 'master';
-        } else if (socketId === this.players.player1SocketId) {
-            containerId = 'video-team1-container';
+        } else if (socketId === this.players.player1?.socketId) {
             role = 'player1';
-        } else if (socketId === this.players.player2SocketId) {
-            containerId = 'video-team2-container';
+        } else if (socketId === this.players.player2?.socketId) {
             role = 'player2';
         } else {
             console.log('👀 Получен поток от наблюдателя, не отображаем');
             return;
         }
+
+        const containerId = this.getVideoContainerIdByRole(role);
+        if (!containerId) return;
 
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -606,7 +603,9 @@ class Game {
         
         const label = document.createElement('div');
         label.className = 'video-label';
-        label.textContent = this.getRoleDisplayNameForPlaceholder(role, this.getPlayerNameByRole(role));
+        const playerName = role === 'master' ? this.players.master?.name :
+                          role === 'player1' ? this.players.player1?.name : this.players.player2?.name;
+        label.textContent = this.getRoleDisplayNameForPlaceholder(role, playerName);
         placeholder.appendChild(label);
         
         this.setVideoContainerColor(containerId, role);
@@ -617,30 +616,41 @@ class Game {
             console.log('⚠️ Невозможно инициировать WebRTC: нет локального потока, сокета или комнаты');
             return;
         }
-        console.log('🔄 Инициируем WebRTC соединения...');
+        console.log('🔄 Инициируем WebRTC соединения со всеми участниками...');
 
-        const targets = [
-            { id: this.players.masterSocketId, name: this.players.master },
-            { id: this.players.player1SocketId, name: this.players.player1 },
-            { id: this.players.player2SocketId, name: this.players.player2 }
-        ];
+        // Собираем всех участников
+        const participants = [];
+        if (this.players.master && this.players.master.socketId !== this.socket.id) {
+            participants.push({ id: this.players.master.socketId, name: this.players.master.name });
+        }
+        if (this.players.player1 && this.players.player1.socketId !== this.socket.id) {
+            participants.push({ id: this.players.player1.socketId, name: this.players.player1.name });
+        }
+        if (this.players.player2 && this.players.player2.socketId !== this.socket.id) {
+            participants.push({ id: this.players.player2.socketId, name: this.players.player2.name });
+        }
+        this.players.spectators.forEach((data, socketId) => {
+            if (socketId !== this.socket.id) {
+                participants.push({ id: socketId, name: data.name });
+            }
+        });
 
-        targets.forEach(target => {
-            if (target.id && target.id !== this.socket.id && !this.peerConnections.has(target.id)) {
-                console.log(`🔗 Инициируем WebRTC соединение с ${target.name} (${target.id})`);
-                this.createPeerConnection(target.id, true);
+        participants.forEach(participant => {
+            if (!this.peerConnections.has(participant.id)) {
+                console.log(`🔗 Инициируем WebRTC соединение с ${participant.name} (${participant.id})`);
+                this.createPeerConnection(participant.id, true);
             }
         });
     }
 
     // ========== Методы интерфейса ==========
-    getVideoContainerIdByRole() {
+    getVideoContainerIdByRole(role = this.role) {
         const roleMap = {
             'master': 'video-master-container',
             'player1': 'video-team1-container',
             'player2': 'video-team2-container'
         };
-        return roleMap[this.role] || null;
+        return roleMap[role] || null;
     }
 
     getRoleDisplayName() {
@@ -665,15 +675,6 @@ class Game {
         }
     }
 
-    getPlayerNameByRole(role) {
-        switch(role) {
-            case 'master': return this.players.master;
-            case 'player1': return this.players.player1;
-            case 'player2': return this.players.player2;
-            default: return '';
-        }
-    }
-
     getRoleDisplayNameForPlaceholder(role, playerName) {
         switch(role) {
             case 'master': return `Ведущий: ${playerName}`;
@@ -685,9 +686,9 @@ class Game {
 
     updateVideoPlaceholders() {
         if (this.gameMode === 'local') return;
-        this.updatePlaceholder('video-master-container', 'master', this.players.master);
-        this.updatePlaceholder('video-team1-container', 'player1', this.players.player1);
-        this.updatePlaceholder('video-team2-container', 'player2', this.players.player2);
+        this.updatePlaceholder('video-master-container', 'master', this.players.master?.name);
+        this.updatePlaceholder('video-team1-container', 'player1', this.players.player1?.name);
+        this.updatePlaceholder('video-team2-container', 'player2', this.players.player2?.name);
     }
 
     updatePlaceholder(containerId, role, playerName) {
@@ -697,7 +698,7 @@ class Game {
         if (!placeholder) return;
 
         // Если это наш контейнер и у нас есть локальный поток, не перезаписываем
-        if (this.getVideoContainerIdByRole() === containerId && this.localStream) {
+        if (this.getVideoContainerIdByRole(this.role) === containerId && this.localStream) {
             return;
         }
 
@@ -1387,7 +1388,7 @@ class Game {
                     }
                 }
                 if (newPosition >= 40) {
-                    const winnerName = team === 1 ? this.players.player1 : this.players.player2;
+                    const winnerName = team === 1 ? this.players.player1?.name : this.players.player2?.name;
                     this.showWinner(team, winnerName, `🎉 Победила команда ${team} (${winnerName})!`);
                 }
             }
@@ -1474,8 +1475,8 @@ class Game {
         `;
         const isMaster = this.gameMode === 'local' || this.role === 'master';
         const teamName = data.team === 1 ? 
-            (this.gameMode === 'online' ? `Команда 1: ${this.players.player1 || ''}` : 'Команда 1') : 
-            (this.gameMode === 'online' ? `Команда 2: ${this.players.player2 || ''}` : 'Команда 2');
+            (this.gameMode === 'online' ? `Команда 1: ${this.players.player1?.name || ''}` : 'Команда 1') : 
+            (this.gameMode === 'online' ? `Команда 2: ${this.players.player2?.name || ''}` : 'Команда 2');
         modal.innerHTML = `
             <div class="zone-modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h3 style="color: ${this.getZoneColor(data.zoneType)}; margin: 0; font-size: 20px;">
@@ -1689,9 +1690,19 @@ class Game {
     }
 
     updatePlayers(players) {
-        this.players.master = players.master?.name || '';
-        this.players.player1 = players.player1?.name || '';
-        this.players.player2 = players.player2?.name || '';
+        // players приходит в формате { master: { name, socketId }, player1: {...}, player2: {...}, spectators: [...] }
+        this.players.master = players.master ? { name: players.master.name, socketId: players.master.socketId } : null;
+        this.players.player1 = players.player1 ? { name: players.player1.name, socketId: players.player1.socketId } : null;
+        this.players.player2 = players.player2 ? { name: players.player2.name, socketId: players.player2.socketId } : null;
+        
+        // Обновляем наблюдателей
+        this.players.spectators.clear();
+        if (players.spectators && Array.isArray(players.spectators)) {
+            players.spectators.forEach(s => {
+                this.players.spectators.set(s.socketId, { name: s.name, role: 'spectator' });
+            });
+        }
+        
         this.updateVideoPlaceholders();
         this.updateMasterPanelNames();
         this.updateConnectionInfoUI();
@@ -1701,10 +1712,10 @@ class Game {
         const masterTeam1 = document.getElementById('master-team1-name');
         const masterTeam2 = document.getElementById('master-team2-name');
         if (masterTeam1) {
-            masterTeam1.textContent = `Команда 1: ${this.players.player1 || 'Ожидает'}`;
+            masterTeam1.textContent = `Команда 1: ${this.players.player1?.name || 'Ожидает'}`;
         }
         if (masterTeam2) {
-            masterTeam2.textContent = `Команда 2: ${this.players.player2 || 'Ожидает'}`;
+            masterTeam2.textContent = `Команда 2: ${this.players.player2?.name || 'Ожидает'}`;
         }
     }
 
@@ -1915,8 +1926,7 @@ class Game {
         this.socket.on('room-created', async (data) => {
             this.roomCode = data.roomCode;
             this.playerName = data.playerName;
-            this.players.master = data.playerName;
-            this.players.masterSocketId = this.socket.id;
+            this.players.master = { name: data.playerName, socketId: this.socket.id };
             this.gameMode = data.gameMode;
             
             modal.querySelector('#room-info').style.display = 'block';
@@ -1950,14 +1960,17 @@ class Game {
             this.role = data.role;
             this.gameMode = data.gameMode;
             
-            // Сохраняем socketId всех участников из data.players
+            // Сохраняем данные участников из data.players
             if (data.players) {
-                this.players.master = data.players.master?.name || '';
-                this.players.masterSocketId = data.players.master?.socketId || null;
-                this.players.player1 = data.players.player1?.name || '';
-                this.players.player1SocketId = data.players.player1?.socketId || null;
-                this.players.player2 = data.players.player2?.name || '';
-                this.players.player2SocketId = data.players.player2?.socketId || null;
+                this.players.master = data.players.master ? { name: data.players.master.name, socketId: data.players.master.socketId } : null;
+                this.players.player1 = data.players.player1 ? { name: data.players.player1.name, socketId: data.players.player1.socketId } : null;
+                this.players.player2 = data.players.player2 ? { name: data.players.player2.name, socketId: data.players.player2.socketId } : null;
+                this.players.spectators.clear();
+                if (data.players.spectators && Array.isArray(data.players.spectators)) {
+                    data.players.spectators.forEach(s => {
+                        this.players.spectators.set(s.socketId, { name: s.name, role: 'spectator' });
+                    });
+                }
             }
             
             if (data.gameState) {
@@ -1968,7 +1981,8 @@ class Game {
                 this.isSpecialZoneActive = data.gameState.isSpecialZoneActive || false;
             }
             
-            this.updatePlayers(data.players); // обновит имена в UI
+            this.updateVideoPlaceholders();
+            this.updateMasterPanelNames();
             
             statusText.innerHTML = '<i class="fas fa-check-circle"></i> Вы в игре!';
             
@@ -1988,38 +2002,43 @@ class Game {
 
         this.socket.on('participants-update', (participants) => {
             console.log('👥 participants-update:', participants);
+            
+            // Обновляем список участников
+            const oldMasterSocket = this.players.master?.socketId;
+            const oldPlayer1Socket = this.players.player1?.socketId;
+            const oldPlayer2Socket = this.players.player2?.socketId;
+            const oldSpectators = new Map(this.players.spectators);
 
-            const updatePlayer = (role, data) => {
-                const oldSocketId = this.players[`${role}SocketId`];
-                const newSocketId = data?.socketId || null;
-                const newName = data?.name || '';
+            this.players.master = participants.master ? { name: participants.master.name, socketId: participants.master.socketId } : null;
+            this.players.player1 = participants.player1 ? { name: participants.player1.name, socketId: participants.player1.socketId } : null;
+            this.players.player2 = participants.player2 ? { name: participants.player2.name, socketId: participants.player2.socketId } : null;
+            
+            this.players.spectators.clear();
+            if (participants.spectators && Array.isArray(participants.spectators)) {
+                participants.spectators.forEach(s => {
+                    this.players.spectators.set(s.socketId, { name: s.name, role: 'spectator' });
+                });
+            }
 
-                this.players[role] = newName;
-                this.players[`${role}SocketId`] = newSocketId;
+            // Закрываем соединения для тех, кто вышел
+            const allOldIds = [oldMasterSocket, oldPlayer1Socket, oldPlayer2Socket, ...oldSpectators.keys()].filter(id => id && id !== this.socket.id);
+            const allNewIds = [
+                this.players.master?.socketId,
+                this.players.player1?.socketId,
+                this.players.player2?.socketId,
+                ...this.players.spectators.keys()
+            ].filter(id => id && id !== this.socket.id);
 
-                if (oldSocketId && newSocketId && oldSocketId !== newSocketId) {
-                    console.log(`🔄 SocketId ${role} изменился: ${oldSocketId} -> ${newSocketId}`);
-                    this.closePeerConnection(oldSocketId);
-                    if (this.localStream && newSocketId !== this.socket.id) {
-                        this.createPeerConnection(newSocketId, true);
-                    }
+            const removedIds = allOldIds.filter(id => !allNewIds.includes(id));
+            removedIds.forEach(id => this.closePeerConnection(id));
+
+            // Инициируем соединения с новыми участниками
+            allNewIds.forEach(id => {
+                if (!this.peerConnections.has(id) && this.localStream) {
+                    console.log(`🆕 Новый участник ${id}, создаём соединение`);
+                    this.createPeerConnection(id, true);
                 }
-                if (!oldSocketId && newSocketId && newSocketId !== this.socket.id) {
-                    console.log(`🆕 Новый участник ${role} (${newSocketId})`);
-                    if (this.localStream) {
-                        this.createPeerConnection(newSocketId, true);
-                    }
-                }
-                if (oldSocketId && !newSocketId) {
-                    console.log(`❌ Участник ${role} (${oldSocketId}) покинул комнату`);
-                    this.closePeerConnection(oldSocketId);
-                }
-            };
-
-            updatePlayer('master', participants.master);
-            updatePlayer('player1', participants.player1);
-            updatePlayer('player2', participants.player2);
-            this.players.spectators = participants.spectators || [];
+            });
 
             this.updateVideoPlaceholders();
             this.updateMasterPanelNames();
