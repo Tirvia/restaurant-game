@@ -18,28 +18,30 @@ body {
     transition: opacity 0.5s ease;
 }
 
-/* ВИДЕО КОНТЕЙНЕР В ВЕРХУ */
+/* ========== ВИДЕО КОНТЕЙНЕРЫ – адаптивные, с возможностью растягивания ========== */
 .video-container {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 20px;
     margin-bottom: 20px;
     background: #2a2a2a;
     padding: 15px;
     border-radius: 15px;
-    height: 180px;
 }
 
 .video-box {
-    flex: 1;
-    max-width: 400px;
+    flex: 1 1 300px;          /* минимум 300px, может расти */
+    max-width: 500px;          /* максимум 500px */
+    min-width: 250px;
     background: #333;
     border-radius: 10px;
     overflow: hidden;
-    aspect-ratio: 16/9;
+    aspect-ratio: 16/9;        /* сохраняем пропорции */
     border: 3px solid #444;
     position: relative;
     transition: all 0.3s;
+    resize: both;              /* разрешаем ручное изменение размера */
 }
 
 /* Постоянная цветная подсветка видео-контейнеров */
@@ -102,11 +104,6 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-/* Скрываем старый текст в плейсхолдере */
-.video-placeholder p {
-    display: none;
-}
-
 .current-turn-indicator {
     position: absolute;
     top: 8px;
@@ -128,7 +125,7 @@ body {
     100% { transform: scale(1); }
 }
 
-/* Верхняя панель - ПЕРЕДЕЛАНА НА FLEX */
+/* Верхняя панель */
 .top-panel {
     display: flex;
     justify-content: space-between;
@@ -142,7 +139,7 @@ body {
     flex-wrap: wrap;
 }
 
-/* Информация о подключении - горизонтальная */
+/* Информация о подключении */
 .connection-info.horizontal {
     display: flex;
     align-items: center;
@@ -596,7 +593,7 @@ body {
     width: 100%;
 }
 
-/* Компактная панель ведущего (БЕЗ КНОПКИ ЗАКРЫТИЯ) */
+/* Компактная панель ведущего */
 .master-panel {
     background: rgba(42, 42, 42, 0.95);
     padding: 15px;
@@ -685,7 +682,7 @@ body {
     justify-content: center;
 }
 
-/* КРУГЛЫЕ КНОПКИ НА ПАНЕЛИ ВЕДУЩЕГО */
+/* Круглые кнопки на панели ведущего */
 .point-btn.compact {
     width: 38px;
     height: 38px;
@@ -1254,7 +1251,7 @@ body {
 .special-zone-modal {
     animation: fadeIn 0.3s ease-out;
     font-family: 'Arial', sans-serif;
-    z-index: 1001 !important; /* выше панели ведущего */
+    z-index: 1001 !important;
 }
 
 .special-zone-modal h3 {
