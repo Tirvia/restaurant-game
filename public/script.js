@@ -1,5 +1,6 @@
 // Полный исправленный script.js
-// Версия 6.1 – клетки 26-40 подняты на 80px, диаметр круга (клетки 26-39) уменьшен (радиус 130)
+// Версия 6.2 – клетки 26-40 подняты на 80px, радиус круга уменьшен до 110,
+// порядок клеток круга изменён: 26->38, 27->39, 28->26, 29->27, ... 39->37
 
 class Game {
     constructor() {
@@ -895,25 +896,33 @@ class Game {
         positions[24] = { x: 510, y: 15 };
         positions[25] = { x: 540, y: 70 };
         
-        // Круглая часть (клетки 26-39) - уменьшенный радиус
+        // Круглая часть (клетки 26-39) - уменьшенный радиус до 110
         const circleCenterX = 800;
         const circleCenterY = 180;
-        const circleRadius = 130; // было 160, уменьшили на 30
+        const circleRadius = 110; // уменьшили с 130 до 110
         const totalSteps = 14;
         const angleStep = 360 / totalSteps;
-        positions[26] = {
-            x: circleCenterX + circleRadius * Math.cos(-120 * Math.PI / 180),
-            y: circleCenterY + circleRadius * Math.sin(-120 * Math.PI / 180)
-        };
-        for (let i = 27; i <= 39; i++) {
-            const step = i - 26;
-            const angle = -120 + (step * angleStep);
+        
+        // Временно сохраняем позиции для круга в исходном порядке (26..39)
+        const tempCircle = [];
+        for (let i = 0; i < 14; i++) {
+            const step = i; // i=0 соответствует 26, i=1 -> 27 и т.д.
+            const angle = -120 + (i * angleStep);
             const angleRad = angle * Math.PI / 180;
-            positions[i] = {
+            tempCircle[i] = {
                 x: circleCenterX + circleRadius * Math.cos(angleRad),
                 y: circleCenterY + circleRadius * Math.sin(angleRad)
             };
         }
+        
+        // Переставляем согласно заданию:
+        // 26 -> tempCircle[12] (бывшая 38), 27 -> tempCircle[13] (39), 28 -> tempCircle[0] (26), 29 -> tempCircle[1] (27), ...
+        const newOrder = [12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        for (let i = 0; i < 14; i++) {
+            positions[26 + i] = { ...tempCircle[newOrder[i]] };
+        }
+        
+        // Финиш (40)
         positions[40] = { x: 790, y: 170 };
 
         // Масштабирование и смещение для всех клеток
@@ -927,7 +936,7 @@ class Game {
             }
         }
 
-        // Поднимаем клетки 26-40 вверх на 80px (было 60, добавили ещё 20)
+        // Поднимаем клетки 26-40 вверх на 80px
         for (let i = 26; i <= 40; i++) {
             if (positions[i]) {
                 positions[i].y -= 80;
