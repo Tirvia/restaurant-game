@@ -1,6 +1,7 @@
 // Полный исправленный script.js
 // Версия 6.0 – корректная WebRTC mesh-сеть только для ведущего и игроков,
 // наблюдатели исключены из WebRTC и не ломают соединения.
+// Изменение: клетки 26-40 (включая финиш) подняты вверх на 60px.
 
 class Game {
     constructor() {
@@ -923,6 +924,14 @@ class Game {
                 positions[i].y = positions[i].y * scale + offsetY;
             }
         }
+
+        // Поднимаем клетки 26-40 вверх на 60px
+        for (let i = 26; i <= 40; i++) {
+            if (positions[i]) {
+                positions[i].y -= 60;
+            }
+        }
+
         return positions;
     }
 
