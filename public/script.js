@@ -1,7 +1,5 @@
 // Полный исправленный script.js
-// Версия 6.0 – корректная WebRTC mesh-сеть только для ведущего и игроков,
-// наблюдатели исключены из WebRTC и не ломают соединения.
-// Изменение: клетки 26-40 (включая финиш) подняты вверх на 60px.
+// Версия 6.1 – клетки 26-40 подняты на 80px, диаметр круга (клетки 26-39) уменьшен (радиус 130)
 
 class Game {
     constructor() {
@@ -896,9 +894,11 @@ class Game {
         positions[23] = { x: 475, y: -30 };
         positions[24] = { x: 510, y: 15 };
         positions[25] = { x: 540, y: 70 };
+        
+        // Круглая часть (клетки 26-39) - уменьшенный радиус
         const circleCenterX = 800;
         const circleCenterY = 180;
-        const circleRadius = 160;
+        const circleRadius = 130; // было 160, уменьшили на 30
         const totalSteps = 14;
         const angleStep = 360 / totalSteps;
         positions[26] = {
@@ -915,6 +915,8 @@ class Game {
             };
         }
         positions[40] = { x: 790, y: 170 };
+
+        // Масштабирование и смещение для всех клеток
         const scale = 0.7;
         const offsetX = 140;
         const offsetY = 100;
@@ -925,10 +927,10 @@ class Game {
             }
         }
 
-        // Поднимаем клетки 26-40 вверх на 60px
+        // Поднимаем клетки 26-40 вверх на 80px (было 60, добавили ещё 20)
         for (let i = 26; i <= 40; i++) {
             if (positions[i]) {
-                positions[i].y -= 60;
+                positions[i].y -= 80;
             }
         }
 
