@@ -1,6 +1,5 @@
 // Полный исправленный script.js
-// Версия 6.2 – клетки 26-40 подняты на 80px, радиус круга уменьшен до 110,
-// порядок клеток круга изменён: 26->38, 27->39, 28->26, 29->27, ... 39->37
+// Версия 6.4 – зона аллергии на клетках 35, 36, 37, надпись смещена (650px, 270px)
 
 class Game {
     constructor() {
@@ -783,9 +782,9 @@ class Game {
                 cell.classList.add('grams');
             } else if (i >= 19 && i <= 22) {
                 cell.classList.add('description');
-            } else if (i >= 33 && i <= 36) {
+            } else if (i === 35 || i === 36 || i === 37) {
                 cell.classList.add('allergy');
-            } else if ((i >= 26 && i <= 32) || (i >= 37 && i <= 39)) {
+            } else if ((i >= 26 && i <= 32) || (i >= 38 && i <= 39)) {
                 cell.classList.add('red');
             } else {
                 cell.classList.add('normal');
@@ -862,8 +861,8 @@ class Game {
             font-family: Arial, sans-serif;
         `;
         allergyLabel.textContent = 'Зона аллергии +1/-5';
-        allergyLabel.style.left = '630px';
-        allergyLabel.style.top = '380px';
+        allergyLabel.style.left = '650px';
+        allergyLabel.style.top = '270px';
         container.appendChild(allergyLabel);
     }
 
@@ -896,10 +895,10 @@ class Game {
         positions[24] = { x: 510, y: 15 };
         positions[25] = { x: 540, y: 70 };
         
-        // Круглая часть (клетки 26-39) - уменьшенный радиус до 110
+        // Круглая часть (клетки 26-39) - уменьшенный радиус до 90, порядок изменён
         const circleCenterX = 800;
         const circleCenterY = 180;
-        const circleRadius = 110; // уменьшили с 130 до 110
+        const circleRadius = 90; // ещё уменьшили
         const totalSteps = 14;
         const angleStep = 360 / totalSteps;
         
