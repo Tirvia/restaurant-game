@@ -1,5 +1,5 @@
 // Полный исправленный script.js
-// Версия 6.4 – зона аллергии на клетках 35, 36, 37, надпись смещена (650px, 270px)
+// Версия 6.5 – радиус круга 110, красные клетки 26-34 и 38-39, аллергия на 35-37, надпись аллергии (650px, 270px)
 
 class Game {
     constructor() {
@@ -784,7 +784,7 @@ class Game {
                 cell.classList.add('description');
             } else if (i === 35 || i === 36 || i === 37) {
                 cell.classList.add('allergy');
-            } else if ((i >= 26 && i <= 32) || (i >= 38 && i <= 39)) {
+            } else if ((i >= 26 && i <= 34) || (i >= 38 && i <= 39)) {
                 cell.classList.add('red');
             } else {
                 cell.classList.add('normal');
@@ -895,10 +895,10 @@ class Game {
         positions[24] = { x: 510, y: 15 };
         positions[25] = { x: 540, y: 70 };
         
-        // Круглая часть (клетки 26-39) - уменьшенный радиус до 90, порядок изменён
+        // Круглая часть (клетки 26-39) - радиус 110
         const circleCenterX = 800;
         const circleCenterY = 180;
-        const circleRadius = 90; // ещё уменьшили
+        const circleRadius = 110; // возвращаем на 110
         const totalSteps = 14;
         const angleStep = 360 / totalSteps;
         
